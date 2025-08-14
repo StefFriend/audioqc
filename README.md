@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)](https://github.com/yourusername/foremhash)
 
 
-*Comprehensive audio quality analyzer with verified SNR/LUFS calculations and professional multi-page A4 PDF reports.*
+*Comprehensive audio quality analyzer with verified SNR/LUFS calculations and professional PDF reports.*
 
 
 ---
