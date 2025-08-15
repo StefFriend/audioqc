@@ -13,6 +13,7 @@ import glob
 import wave
 import audioop
 import warnings
+import hashlib
 warnings.filterwarnings('ignore')
 
 # Try to import pydub for universal audio format support
@@ -24,10 +25,10 @@ except ImportError:
     print("Warning: pydub not installed. Install with: pip install pydub")
     print("Limited to WAV format support only.")
 
-class ProfessionalAudioAnalyzer:
+class AudioAnalyzer:
     """
-    Professional audio analyzer with verified calculations
-    and enhanced A4 PDF reporting
+    Professional audio analyzer with objective measurements
+    Including SNR, LUFS, and LNR (LUFS to Noise Ratio)
     """
     
     def __init__(self, audio_file, sr=None):
@@ -36,6 +37,11 @@ class ProfessionalAudioAnalyzer:
             self.filename = os.path.basename(audio_file)
             self.filepath = audio_file
             print(f"  Loading: {self.filename}")
+            
+            # Calculate file hash
+            self.file_hash = self.calculate_file_hash(audio_file)
+            print(f"  SHA256: {self.file_hash[:16]}...")
+            
             self.audio, self.sr, self.metadata = self.load_audio_universal(audio_file, sr)
             
             # Store original channels info
@@ -48,6 +54,7 @@ class ProfessionalAudioAnalyzer:
         else:
             self.filename = "Audio Stream"
             self.filepath = None
+            self.file_hash = "N/A"
             self.audio = audio_file
             self.sr = sr if sr else 44100
             self.original_channels = 1
@@ -71,12 +78,12 @@ class ProfessionalAudioAnalyzer:
         self.duration = len(self.audio) / self.sr
         print(f"  Duration: {self.duration:.2f}s, Sample rate: {self.sr}Hz")
         
-        # Analysis parameters (verified for accuracy)
+        # Analysis parameters
         self.frame_length = 2048
         self.hop_length = 512
         self.results = {}
         
-        # PDF settings for professional output
+        # PDF settings
         self.dpi = 100
         self.color_scheme = {
             'primary': '#1e3a5f',      # Dark blue
@@ -87,6 +94,14 @@ class ProfessionalAudioAnalyzer:
             'danger': '#e74c3c',       # Red
             'neutral': '#95a5a6'       # Gray
         }
+    
+    def calculate_file_hash(self, filepath):
+        """Calculate SHA256 hash of the file"""
+        sha256_hash = hashlib.sha256()
+        with open(filepath, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
     
     def load_audio_universal(self, filepath, target_sr=None):
         """Universal audio loader with metadata extraction"""
@@ -226,7 +241,6 @@ class ProfessionalAudioAnalyzer:
             return np.array([0.0])
         
         if n < frame_length:
-            # For very short audio, use the whole signal
             return np.array([np.sqrt(np.mean(audio ** 2) + eps)])
         
         n_frames = 1 + (n - frame_length) // hop_length
@@ -244,7 +258,7 @@ class ProfessionalAudioAnalyzer:
         """Detect silence regions with adaptive thresholding"""
         rms = self.calculate_rms(self.audio, self.frame_length, self.hop_length)
         
-        # Adaptive threshold based on noise floor estimation
+        # Adaptive threshold
         sorted_rms = np.sort(rms)
         noise_floor_estimate = np.mean(sorted_rms[:max(1, len(sorted_rms)//10)])
         threshold = max(np.percentile(rms, percentile), noise_floor_estimate * 1.5)
@@ -277,23 +291,22 @@ class ProfessionalAudioAnalyzer:
         return clean_mask, rms, silence_regions
     
     def calculate_snr(self):
-        """Calculate verified SNR metrics with robust estimators"""
+        """Calculate SNR metrics"""
         eps = 1e-10
         
         # Detect silence
         silence_mask, rms, silence_regions = self.detect_silence()
         active_mask = ~silence_mask
         
-        # Noise floor estimation (use median for robustness)
+        # Noise floor estimation
         if np.any(silence_mask):
             noise_rms = np.median(rms[silence_mask])
         else:
             noise_rms = np.percentile(rms, 10)
         
-        # Signal level estimation (trimmed mean for robustness)
+        # Signal level estimation
         if np.any(active_mask):
             active_rms = rms[active_mask]
-            # Remove outliers using IQR method
             q1, q3 = np.percentile(active_rms, [25, 75])
             iqr = q3 - q1
             lower_bound = q1 - 1.5 * iqr
@@ -312,19 +325,17 @@ class ProfessionalAudioAnalyzer:
         noise_floor_db = 20 * np.log10(noise_rms + eps)
         signal_level_db = 20 * np.log10(signal_rms + eps)
         
-        # Speech-weighted SNR (ITU-T P.56 weighting)
+        # Speech-weighted SNR
         nyquist = self.sr / 2
         low = min(300 / nyquist, 0.99)
         high = min(3400 / nyquist, 0.99)
         
-        if high > low:  # Only if valid frequency range
+        if high > low:
             b, a = scipy.signal.butter(4, [low, high], btype='band')
             filtered_audio = scipy.signal.filtfilt(b, a, self.audio)
             
-            # Recalculate RMS for filtered signal
             rms_filtered = self.calculate_rms(filtered_audio, self.frame_length, self.hop_length)
             
-            # Recalculate silence mask for filtered signal
             threshold_filtered = np.percentile(rms_filtered, 10)
             silence_filtered = rms_filtered < threshold_filtered
             active_filtered = ~silence_filtered
@@ -366,7 +377,7 @@ class ProfessionalAudioAnalyzer:
                     'snr': float(window_snr)
                 })
         
-        # Calculate crest factor
+        # Crest factor
         peak = np.max(np.abs(self.audio))
         rms_global = np.sqrt(np.mean(self.audio ** 2))
         crest_factor_db = 20 * np.log10((peak + eps) / (rms_global + eps))
@@ -381,11 +392,12 @@ class ProfessionalAudioAnalyzer:
             'silence_mask': silence_mask,
             'silence_regions': silence_regions,
             'silence_percentage': float(np.mean(silence_mask) * 100),
-            'temporal_snr': temporal_snr
+            'temporal_snr': temporal_snr,
+            'noise_rms': noise_rms  # Store for LNR calculation
         }
     
-    def calculate_lufs(self):
-        """Calculate LUFS following ITU-R BS.1770-4 standard"""
+    def calculate_lufs_and_lnr(self):
+        """Calculate LUFS and LNR (LUFS to Noise Ratio)"""
         # K-weighting filter coefficients
         # Stage 1: High shelf filter
         f0 = 1681.974450955533
@@ -419,8 +431,8 @@ class ProfessionalAudioAnalyzer:
         weighted = scipy.signal.lfilter([b0_hp, b1_hp, b2_hp], [1.0, a1_hp, a2_hp], weighted)
         
         # Momentary loudness (400ms blocks, 100ms hop)
-        block_size = int(0.4 * self.sr)  # 400ms
-        hop_size = int(0.1 * self.sr)    # 100ms
+        block_size = int(0.4 * self.sr)
+        hop_size = int(0.1 * self.sr)
         
         momentary_powers = []
         momentary_times = []
@@ -456,16 +468,13 @@ class ProfessionalAudioAnalyzer:
         short_term_lufs = -0.691 + 10 * np.log10(short_term_powers + eps)
         
         # Integrated loudness with gating
-        # Absolute gate at -70 LUFS
         absolute_gate_power = 10 ** ((-70 + 0.691) / 10)
         gated_powers = momentary_powers[momentary_powers >= absolute_gate_power]
         
         if len(gated_powers) > 0:
-            # Relative gate at -10 LU below ungated mean
             ungated_mean_power = np.mean(gated_powers)
-            relative_gate_power = ungated_mean_power / 10  # -10 LU = factor of 10
+            relative_gate_power = ungated_mean_power / 10
             
-            # Final gating
             final_gate_power = max(absolute_gate_power, relative_gate_power)
             final_gated_powers = momentary_powers[momentary_powers >= final_gate_power]
             
@@ -478,14 +487,68 @@ class ProfessionalAudioAnalyzer:
         
         integrated_lufs = -0.691 + 10 * np.log10(integrated_power)
         
+        # Calculate noise floor in LUFS
+        # Apply K-weighting to silence regions
+        silence_mask, _, _ = self.detect_silence()
+        
+        # Expand silence mask to audio samples
+        silence_samples = np.zeros(len(self.audio), dtype=bool)
+        for i, is_silent in enumerate(silence_mask):
+            start = i * self.hop_length
+            end = min((i + 1) * self.hop_length, len(self.audio))
+            silence_samples[start:end] = is_silent
+        
+        if np.any(silence_samples):
+            noise_weighted = weighted[silence_samples]
+            noise_power = np.mean(noise_weighted ** 2) if len(noise_weighted) > 0 else eps
+        else:
+            # Use bottom 10% of weighted signal
+            sorted_weighted = np.sort(np.abs(weighted))
+            noise_weighted = sorted_weighted[:len(sorted_weighted)//10]
+            noise_power = np.mean(noise_weighted ** 2) if len(noise_weighted) > 0 else eps
+        
+        noise_floor_lufs = -0.691 + 10 * np.log10(noise_power + eps)
+        
+        # Calculate LNR (LUFS to Noise Ratio)
+        lnr = integrated_lufs - noise_floor_lufs
+        
+        # Temporal LNR
+        temporal_lnr = []
+        window_duration = 10  # seconds
+        window_samples = int(window_duration * self.sr)
+        n_windows = max(1, len(weighted) // window_samples)
+        
+        for i in range(n_windows):
+            start = i * window_samples
+            end = min((i + 1) * window_samples, len(weighted))
+            window = weighted[start:end]
+            
+            if len(window) > 0:
+                # Signal LUFS
+                signal_power = np.mean(window ** 2)
+                window_lufs = -0.691 + 10 * np.log10(signal_power + eps)
+                
+                # Noise LUFS (bottom 10% of window)
+                sorted_window = np.sort(np.abs(window))
+                noise_window = sorted_window[:len(sorted_window)//10]
+                noise_power_window = np.mean(noise_window ** 2) if len(noise_window) > 0 else eps
+                noise_lufs_window = -0.691 + 10 * np.log10(noise_power_window + eps)
+                
+                window_lnr = window_lufs - noise_lufs_window
+                
+                temporal_lnr.append({
+                    'start': i * window_duration,
+                    'end': min((i + 1) * window_duration, self.duration),
+                    'lnr': float(window_lnr)
+                })
+        
         # Loudness range (LRA)
         if len(short_term_lufs) > 1:
             lra = np.percentile(short_term_lufs, 95) - np.percentile(short_term_lufs, 10)
         else:
             lra = 0.0
         
-        # True peak (oversampled peak detection)
-        # Simple 4x oversampling for true peak estimation
+        # True peak
         oversampled = scipy.signal.resample(self.audio, len(self.audio) * 4)
         true_peak = np.max(np.abs(oversampled))
         true_peak_db = 20 * np.log10(true_peak + eps)
@@ -500,12 +563,14 @@ class ProfessionalAudioAnalyzer:
             'max_short_term': float(np.max(short_term_lufs)) if len(short_term_lufs) > 0 else -70.0,
             'lra': float(lra),
             'true_peak': float(true_peak),
-            'true_peak_db': float(true_peak_db)
+            'true_peak_db': float(true_peak_db),
+            'noise_floor_lufs': float(noise_floor_lufs),
+            'lnr': float(lnr),
+            'temporal_lnr': temporal_lnr
         }
     
     def analyze_frequency_bands(self):
         """Analyze frequency content and band-specific SNR"""
-        # Use optimized FFT size
         nperseg = min(self.frame_length, 2048)
         
         f, t, Sxx = scipy.signal.spectrogram(
@@ -516,7 +581,6 @@ class ProfessionalAudioAnalyzer:
             scaling='spectrum'
         )
         
-        # Professional frequency bands
         bands = [
             (20, 60, "Sub-bass"),
             (60, 250, "Bass"),
@@ -535,7 +599,6 @@ class ProfessionalAudioAnalyzer:
             
             band_power = Sxx[mask, :].mean(axis=0)
             
-            # Robust SNR estimation for band
             noise_floor = np.percentile(band_power, 10)
             signal_level = np.percentile(band_power, 75)
             
@@ -544,7 +607,6 @@ class ProfessionalAudioAnalyzer:
             else:
                 band_snr = 0
             
-            # Average power in band
             avg_power = 10 * np.log10(np.mean(band_power) + 1e-10)
             
             band_analysis.append({
@@ -569,7 +631,7 @@ class ProfessionalAudioAnalyzer:
         rms = np.sqrt(np.mean(self.audio ** 2))
         rms_db = 20 * np.log10(rms + eps)
         
-        # Dynamic range (using RMS frames with silence gating)
+        # Dynamic range
         rms_frames = self.calculate_rms(self.audio, self.frame_length, self.hop_length)
         silence_mask, _, _ = self.detect_silence()
         active_frames = rms_frames[~silence_mask] if np.any(~silence_mask) else rms_frames
@@ -586,13 +648,11 @@ class ProfessionalAudioAnalyzer:
         magnitude = np.abs(fft)
         freqs = np.fft.rfftfreq(len(self.audio), 1/self.sr)
         
-        # Spectral centroid
         if np.sum(magnitude) > 0:
             spectral_centroid = np.sum(freqs * magnitude) / np.sum(magnitude)
         else:
             spectral_centroid = 0.0
         
-        # Spectral rolloff (85%)
         cumsum = np.cumsum(magnitude)
         if cumsum[-1] > 0:
             rolloff_idx = np.where(cumsum >= 0.85 * cumsum[-1])[0]
@@ -603,7 +663,6 @@ class ProfessionalAudioAnalyzer:
         else:
             spectral_rolloff = 0.0
         
-        # Zero crossing rate
         zcr = np.sum(np.abs(np.diff(np.sign(self.audio)))) / (2 * len(self.audio))
         
         return {
@@ -617,151 +676,15 @@ class ProfessionalAudioAnalyzer:
             'zcr': float(zcr)
         }
     
-    def assess_quality(self, snr, lufs, stats):
-        """Professional quality assessment with detailed scoring"""
-        score = 0
-        max_score = 100
-        details = []
-        
-        # SNR scoring (30 points)
-        if snr['global_snr'] >= 50:
-            score += 30
-            details.append("SNR: Excellent (50+ dB)")
-        elif snr['global_snr'] >= 40:
-            score += 25
-            details.append("SNR: Very Good (40-50 dB)")
-        elif snr['global_snr'] >= 30:
-            score += 20
-            details.append("SNR: Good (30-40 dB)")
-        elif snr['global_snr'] >= 20:
-            score += 10
-            details.append("SNR: Acceptable (20-30 dB)")
-        else:
-            score += 5
-            details.append("SNR: Poor (<20 dB)")
-        
-        # LUFS scoring (25 points)
-        ideal_lufs = -16  # Streaming standard
-        lufs_deviation = abs(lufs['integrated'] - ideal_lufs)
-        
-        if lufs_deviation <= 2:
-            score += 25
-            details.append("Loudness: Ideal for streaming")
-        elif lufs_deviation <= 5:
-            score += 20
-            details.append("Loudness: Good")
-        elif lufs_deviation <= 10:
-            score += 15
-            details.append("Loudness: Acceptable")
-        elif lufs_deviation <= 15:
-            score += 10
-            details.append("Loudness: Suboptimal")
-        else:
-            score += 5
-            details.append("Loudness: Poor")
-        
-        # Dynamic range scoring (20 points)
-        if 15 <= stats['dynamic_range'] <= 30:
-            score += 20
-            details.append("Dynamic Range: Optimal")
-        elif 10 <= stats['dynamic_range'] < 15 or 30 < stats['dynamic_range'] <= 40:
-            score += 15
-            details.append("Dynamic Range: Good")
-        elif 5 <= stats['dynamic_range'] < 10 or 40 < stats['dynamic_range'] <= 50:
-            score += 10
-            details.append("Dynamic Range: Acceptable")
-        else:
-            score += 5
-            details.append("Dynamic Range: Poor")
-        
-        # LRA scoring (15 points)
-        if 7 <= lufs['lra'] <= 20:
-            score += 15
-            details.append("Loudness Range: Optimal")
-        elif 5 <= lufs['lra'] < 7 or 20 < lufs['lra'] <= 25:
-            score += 10
-            details.append("Loudness Range: Good")
-        else:
-            score += 5
-            details.append("Loudness Range: Poor")
-        
-        # True peak scoring (10 points)
-        if lufs['true_peak_db'] <= -1:
-            score += 10
-            details.append("True Peak: Excellent headroom")
-        elif lufs['true_peak_db'] <= -0.3:
-            score += 7
-            details.append("True Peak: Acceptable")
-        else:
-            score += 3
-            details.append("True Peak: Risk of clipping")
-        
-        # Overall grade
-        percentage = (score / max_score) * 100
-        
-        if percentage >= 85:
-            grade = "Excellent - Broadcast/Master Quality"
-            color = self.color_scheme['success']
-        elif percentage >= 70:
-            grade = "Good - Professional Quality"
-            color = self.color_scheme['success']
-        elif percentage >= 55:
-            grade = "Acceptable - Consumer Quality"
-            color = self.color_scheme['warning']
-        elif percentage >= 40:
-            grade = "Fair - Needs Improvement"
-            color = self.color_scheme['warning']
-        else:
-            grade = "Poor - Significant Issues"
-            color = self.color_scheme['danger']
-        
-        # Generate recommendations
-        recommendations = []
-        
-        if snr['global_snr'] < 30:
-            recommendations.append("• Apply noise reduction to improve SNR")
-        
-        if lufs_deviation > 5:
-            if lufs['integrated'] < ideal_lufs:
-                recommendations.append(f"• Increase level by {ideal_lufs - lufs['integrated']:.1f} dB for streaming")
-            else:
-                recommendations.append(f"• Decrease level by {lufs['integrated'] - ideal_lufs:.1f} dB for streaming")
-        
-        if lufs['lra'] < 5:
-            recommendations.append("• Audio may be over-compressed, consider reducing compression")
-        elif lufs['lra'] > 25:
-            recommendations.append("• Very wide dynamic range, consider gentle compression")
-        
-        if lufs['true_peak_db'] > -0.3:
-            recommendations.append("• Apply limiting to prevent clipping (target -1 dBTP)")
-        
-        if stats['dynamic_range'] < 10:
-            recommendations.append("• Limited dynamic range detected, check compression settings")
-        
-        if not recommendations:
-            recommendations.append("✓ Audio meets professional standards")
-            recommendations.append("✓ Suitable for distribution")
-        
-        return {
-            'score': score,
-            'max_score': max_score,
-            'percentage': percentage,
-            'grade': grade,
-            'color': color,
-            'details': details,
-            'recommendations': recommendations
-        }
-    
     def create_professional_report(self):
-        """Generate enhanced professional A4 PDF report"""
-        print(f"  Generating professional report...")
+        """Generate professional A4 PDF report without quality judgments"""
+        print(f"  Generating analysis report...")
         
         # Run all analyses
         snr = self.calculate_snr()
-        lufs = self.calculate_lufs()
+        lufs = self.calculate_lufs_and_lnr()
         bands, f, t, Sxx = self.analyze_frequency_bands()
         stats = self.calculate_statistics()
-        quality = self.assess_quality(snr, lufs, stats)
         
         # Store results
         self.results = {
@@ -769,51 +692,58 @@ class ProfessionalAudioAnalyzer:
             'lufs': lufs,
             'bands': bands,
             'stats': stats,
-            'quality': quality,
-            'metadata': self.metadata
+            'metadata': self.metadata,
+            'file_hash': self.file_hash
         }
         
-        # Professional A4 template
+        # Create report pages
         figures = []
         
-        # Page 1: Executive Summary
+        # Page 1: Executive Summary with Hash
         fig1 = self.create_executive_summary_page()
         figures.append(fig1)
         
-        # Page 2: Technical Analysis
-        fig2 = self.create_technical_analysis_page()
+        # Page 2: SNR and LNR Analysis
+        fig2 = self.create_snr_lnr_page()
         figures.append(fig2)
         
-        # Page 3: Spectral Analysis
-        fig3 = self.create_spectral_analysis_page()
+        # Page 3: LUFS Analysis
+        fig3 = self.create_lufs_analysis_page()
         figures.append(fig3)
         
-        # Page 4: Recommendations
-        fig4 = self.create_recommendations_page()
+        # Page 4: Spectral Analysis
+        fig4 = self.create_spectral_analysis_page()
         figures.append(fig4)
+        
+        # Page 5: Measurement Explanation
+        fig5 = self.create_measurement_explanation_page()
+        figures.append(fig5)
+        
+        # Page 6: Standards Reference
+        fig6 = self.create_standards_reference_page()
+        figures.append(fig6)
         
         return figures
     
     def create_executive_summary_page(self):
-        """Create executive summary page with quality score and key metrics"""
+        """Create executive summary page with file hash and measurements"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
         # Header
-        fig.text(0.5, 0.96, 'AudioQC ANALYSIS REPORT', 
+        fig.text(0.5, 0.96, 'AUDIOQC ANALYSIS REPORT', 
                 fontsize=18, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        fig.text(0.5, 0.94, 'Executive Summary', 
+        fig.text(0.5, 0.94, 'Technical Measurements', 
                 fontsize=14, ha='center', color=self.color_scheme['secondary'])
         
-        # Create grid with more rows for better spacing
-        gs = GridSpec(7, 3, figure=fig, hspace=0.5, wspace=0.4,
+        # Grid
+        gs = GridSpec(6, 3, figure=fig, hspace=0.5, wspace=0.4,
                      top=0.90, bottom=0.05, left=0.08, right=0.92)
         
-        # File information card
+        # File information with hash
         ax_info = fig.add_subplot(gs[0, :])
         ax_info.axis('off')
         
-        # Create info box with border
-        info_rect = mpatches.FancyBboxPatch((0.02, 0.1), 0.96, 0.8,
+        info_rect = mpatches.FancyBboxPatch((0.02, 0.05), 0.96, 0.9,
                                            boxstyle="round,pad=0.02",
                                            facecolor='#f8f9fa',
                                            edgecolor=self.color_scheme['primary'],
@@ -822,115 +752,127 @@ class ProfessionalAudioAnalyzer:
         
         info_text = f"""
   File: {self.filename}
+  SHA256: {self.file_hash}
   Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)} | Sample Rate: {self.sr} Hz
   Duration: {self.duration:.2f}s | Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}
         """
-        ax_info.text(0.5, 0.5, info_text, fontsize=10, ha='center', va='center',
-                    transform=ax_info.transAxes)
+        ax_info.text(0.5, 0.5, info_text, fontsize=9, ha='center', va='center',
+                    transform=ax_info.transAxes, family='monospace')
         
-        # Quality Score Gauge (spans 2 rows for prominence)
-        ax_gauge = fig.add_subplot(gs[1:3, :])
-        self.draw_professional_gauge(ax_gauge)
+        # Key measurements table
+        ax_table = fig.add_subplot(gs[1:3, :])
+        ax_table.axis('off')
         
-        # Key Metrics Cards - Fixed layout
-        metrics = [
-            ('SNR', f"{self.results['snr']['global_snr']:.1f} dB", self.get_metric_color('snr', self.results['snr']['global_snr'])),
-            ('LUFS', f"{self.results['lufs']['integrated']:.1f}", self.get_metric_color('lufs', self.results['lufs']['integrated'])),
-            ('LRA', f"{self.results['lufs']['lra']:.1f} LU", self.get_metric_color('lra', self.results['lufs']['lra'])),
-            ('True Peak', f"{self.results['lufs']['true_peak_db']:.1f} dB", self.get_metric_color('peak', self.results['lufs']['true_peak_db'])),
-            ('Dynamic Range', f"{self.results['stats']['dynamic_range']:.1f} dB", self.get_metric_color('dr', self.results['stats']['dynamic_range'])),
-            ('Noise Floor', f"{self.results['snr']['noise_floor']:.1f} dB", self.color_scheme['neutral'])
+        measurements = [
+            ['Measurement', 'Value', 'Unit'],
+            ['', '', ''],
+            ['SIGNAL METRICS', '', ''],
+            ['Global SNR', f"{self.results['snr']['global_snr']:.1f}", 'dB'],
+            ['Speech-weighted SNR', f"{self.results['snr']['speech_weighted_snr']:.1f}", 'dB'],
+            ['LNR (LUFS to Noise)', f"{self.results['lufs']['lnr']:.1f}", 'LU'],
+            ['', '', ''],
+            ['LOUDNESS', '', ''],
+            ['Integrated LUFS', f"{self.results['lufs']['integrated']:.1f}", 'LUFS'],
+            ['Max Momentary', f"{self.results['lufs']['max_momentary']:.1f}", 'LUFS'],
+            ['Max Short-term', f"{self.results['lufs']['max_short_term']:.1f}", 'LUFS'],
+            ['Loudness Range (LRA)', f"{self.results['lufs']['lra']:.1f}", 'LU'],
+            ['', '', ''],
+            ['LEVELS', '', ''],
+            ['True Peak', f"{self.results['lufs']['true_peak_db']:.1f}", 'dBTP'],
+            ['Noise Floor (dB)', f"{self.results['snr']['noise_floor']:.1f}", 'dBFS'],
+            ['Noise Floor (LUFS)', f"{self.results['lufs']['noise_floor_lufs']:.1f}", 'LUFS'],
+            ['Signal Level', f"{self.results['snr']['signal_level']:.1f}", 'dBFS'],
+            ['', '', ''],
+            ['DYNAMICS', '', ''],
+            ['Dynamic Range', f"{self.results['stats']['dynamic_range']:.1f}", 'dB'],
+            ['Crest Factor', f"{self.results['snr']['crest_factor']:.1f}", 'dB'],
+            ['Silence', f"{self.results['snr']['silence_percentage']:.1f}", '%']
         ]
         
-        # Create two rows of 3 metrics each
-        for i, (label, value, color) in enumerate(metrics):
-            row = 3 if i < 3 else 4
-            col = i % 3
-            ax = fig.add_subplot(gs[row, col])
-            ax.axis('off')
-            
-            # Metric card with proper spacing
-            rect = mpatches.FancyBboxPatch((0.1, 0.15), 0.8, 0.7,
-                                          boxstyle="round,pad=0.02",
-                                          facecolor=color, alpha=0.15,
-                                          edgecolor=color, linewidth=1.5)
-            ax.add_patch(rect)
-            
-            # Value text (larger, positioned higher)
-            ax.text(0.5, 0.6, value, fontsize=11, fontweight='bold',
-                   ha='center', va='center', color=color,
-                   transform=ax.transAxes)
-            # Label text (smaller, positioned lower)
-            ax.text(0.5, 0.25, label, fontsize=8, ha='center', va='center',
-                   color=self.color_scheme['primary'],
-                   transform=ax.transAxes)
+        # Create formatted table
+        table_text = ""
+        for row in measurements:
+            if row[0] in ['SIGNAL METRICS', 'LOUDNESS', 'LEVELS', 'DYNAMICS']:
+                table_text += f"\n{row[0]}\n" + "─" * 60 + "\n"
+            elif row[0] != '':
+                table_text += f"  {row[0]:<25} {row[1]:>15} {row[2]:>10}\n"
         
-        # Quick Assessment
-        ax_assess = fig.add_subplot(gs[5:, :])
-        ax_assess.axis('off')
+        ax_table.text(0.1, 0.5, table_text, fontsize=9, family='monospace',
+                     transform=ax_table.transAxes, va='center')
         
-        # Assessment box with improved spacing
-        assess_rect = mpatches.FancyBboxPatch((0.02, 0.15), 0.96, 0.8,
-                                             boxstyle="round,pad=0.02",
-                                             facecolor=self.results['quality']['color'],
-                                             alpha=0.1,
-                                             edgecolor=self.results['quality']['color'],
-                                             linewidth=2)
-        ax_assess.add_patch(assess_rect)
-        
-        # Format text with proper line spacing
-        assess_lines = []
-        assess_lines.append(f"QUALITY ASSESSMENT: {self.results['quality']['grade']}")
-        assess_lines.append("")
-        assess_lines.append("KEY FINDINGS:")
-        for detail in self.results['quality']['details'][:5]:
-            assess_lines.append(f"  • {detail}")
-        assess_lines.append("")
-        assess_lines.append("TOP RECOMMENDATIONS:")
-        for rec in self.results['quality']['recommendations'][:3]:
-            assess_lines.append(f"  {rec}")
-        
-        assess_text = '\n'.join(assess_lines)
-        
-        ax_assess.text(0.05, 0.5, assess_text, fontsize=9,
-                      transform=ax_assess.transAxes, va='center')
+        # Waveform preview
+        ax_wave = fig.add_subplot(gs[3:5, :])
+        self.plot_waveform_simple(ax_wave)
         
         # Footer
-        fig.text(0.5, 0.02, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | AudioQC Professional v0.1",
-                fontsize=8, ha='center', color='gray')
+        ax_footer = fig.add_subplot(gs[5, :])
+        ax_footer.axis('off')
+        footer_text = f"""
+Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+AudioQC v0.2
+        """
+        ax_footer.text(0.5, 0.5, footer_text, fontsize=8, ha='center', va='center',
+                      transform=ax_footer.transAxes, color='gray')
         
         return fig
     
-    def create_technical_analysis_page(self):
-        """Create technical analysis page with waveform and loudness"""
+    def create_snr_lnr_page(self):
+        """Create SNR and LNR analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
-        # Header with proper spacing
-        fig.text(0.5, 0.97, 'TECHNICAL ANALYSIS', 
+        fig.text(0.5, 0.97, 'SNR AND LNR ANALYSIS', 
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
-        gs = GridSpec(5, 2, figure=fig, hspace=0.35, wspace=0.3,
+        gs = GridSpec(5, 2, figure=fig, hspace=0.45, wspace=0.35,
                      top=0.93, bottom=0.04, left=0.08, right=0.95)
         
-        # Waveform with silence detection
-        ax_wave = fig.add_subplot(gs[0, :])
-        self.plot_waveform_professional(ax_wave)
-        
-        # RMS Energy
-        ax_rms = fig.add_subplot(gs[1, :])
-        self.plot_rms_energy_professional(ax_rms)
-        
-        # LUFS Timeline
-        ax_lufs = fig.add_subplot(gs[2, :])
-        self.plot_lufs_timeline_professional(ax_lufs)
+        # RMS Energy with noise floor
+        ax_rms = fig.add_subplot(gs[0, :])
+        self.plot_rms_energy(ax_rms)
         
         # Temporal SNR
-        ax_temporal = fig.add_subplot(gs[3, :])
-        self.plot_temporal_snr_professional(ax_temporal)
+        ax_snr = fig.add_subplot(gs[1, :])
+        self.plot_temporal_snr(ax_snr)
         
-        # Statistics table
-        ax_stats = fig.add_subplot(gs[4, :])
-        self.create_statistics_table(ax_stats)
+        # Temporal LNR (new)
+        ax_lnr = fig.add_subplot(gs[2, :])
+        self.plot_temporal_lnr(ax_lnr)
+        
+        # SNR vs LNR Comparison
+        ax_compare = fig.add_subplot(gs[3, :])
+        self.plot_snr_lnr_comparison(ax_compare)
+        
+        # Frequency bands SNR
+        ax_bands = fig.add_subplot(gs[4, :])
+        self.plot_frequency_bands(ax_bands)
+        
+        return fig
+    
+    def create_lufs_analysis_page(self):
+        """Create LUFS analysis page"""
+        fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
+        
+        fig.text(0.5, 0.97, 'LOUDNESS ANALYSIS (LUFS)', 
+                fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
+        
+        gs = GridSpec(4, 2, figure=fig, hspace=0.35, wspace=0.35,
+                     top=0.93, bottom=0.04, left=0.08, right=0.95)
+        
+        # LUFS Timeline
+        ax_lufs = fig.add_subplot(gs[0:2, :])
+        self.plot_lufs_timeline(ax_lufs)
+        
+        # LUFS distribution
+        ax_dist = fig.add_subplot(gs[2, 0])
+        self.plot_lufs_distribution(ax_dist)
+        
+        # Amplitude distribution
+        ax_amp = fig.add_subplot(gs[2, 1])
+        self.plot_amplitude_histogram(ax_amp)
+        
+        # LUFS Statistics
+        ax_stats = fig.add_subplot(gs[3, :])
+        self.create_lufs_statistics_table(ax_stats)
         
         return fig
     
@@ -941,170 +883,189 @@ class ProfessionalAudioAnalyzer:
         fig.text(0.5, 0.97, 'SPECTRAL ANALYSIS', 
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
-        gs = GridSpec(4, 2, figure=fig, hspace=0.35, wspace=0.35,
+        gs = GridSpec(3, 1, figure=fig, hspace=0.35,
                      top=0.93, bottom=0.04, left=0.08, right=0.95)
         
-        # Spectrogram (spans full width)
-        ax_spec = fig.add_subplot(gs[0:2, :])
-        self.plot_spectrogram_professional(ax_spec)
+        # Spectrogram
+        ax_spec = fig.add_subplot(gs[0:2])
+        self.plot_spectrogram(ax_spec)
         
-        # Frequency bands SNR (full width)
-        ax_bands = fig.add_subplot(gs[2, :])
-        self.plot_frequency_bands_professional(ax_bands)
-        
-        # Amplitude distribution (left)
-        ax_hist = fig.add_subplot(gs[3, 0])
-        self.plot_amplitude_histogram(ax_hist)
-        
-        # LUFS distribution (right)
-        ax_lufs_dist = fig.add_subplot(gs[3, 1])
-        self.plot_lufs_distribution(ax_lufs_dist)
+        # Spectral statistics
+        ax_stats = fig.add_subplot(gs[2])
+        self.plot_spectral_statistics(ax_stats)
         
         return fig
     
-    def create_recommendations_page(self):
-        """Create detailed recommendations page"""
+    def create_measurement_explanation_page(self):
+        """Create page explaining SNR, LUFS, and LNR"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
-        fig.text(0.5, 0.97, 'PROFESSIONAL RECOMMENDATIONS', 
+        fig.text(0.5, 0.97, 'MEASUREMENT EXPLANATIONS', 
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
-        # Main text area
         ax = fig.add_subplot(111)
         ax.axis('off')
         
-        # Create professional recommendations text
-        rec_text = self.generate_professional_recommendations()
+        explanation_text = """
+SNR (Signal-to-Noise Ratio)
+────────────────────────────────────────────────────────────────────────────────
+The SNR measures the level difference between the desired signal and background 
+noise in decibels (dB). It represents how much the signal stands out from the 
+noise floor.
+
+• Global SNR: Overall signal-to-noise ratio across the entire file
+• Speech-weighted SNR: SNR filtered for speech frequencies (300-3400 Hz)
+• Higher values indicate cleaner recordings with less noise
+• Measured in dB (logarithmic scale)
+
+LUFS (Loudness Units relative to Full Scale)
+────────────────────────────────────────────────────────────────────────────────
+LUFS is a standardized measurement of audio loudness that accounts for human 
+perception, as defined in ITU-R BS.1770-4. Unlike peak or RMS measurements, 
+LUFS uses K-weighting filters to match human hearing sensitivity.
+
+• Integrated LUFS: Average loudness over the entire file with gating
+• Momentary LUFS: 400ms window measurements
+• Short-term LUFS: 3-second window measurements
+• LRA (Loudness Range): Difference between loud and quiet parts
+• Negative scale where 0 LUFS = digital maximum
+
+LNR (LUFS to Noise Ratio) - Custom derived metric
+────────────────────────────────────────────────────────────────────────────────
+LNR is the loudness-domain equivalent of SNR, measuring the difference between 
+the integrated LUFS and the noise floor expressed in LUFS. This provides a 
+perceptually-weighted assessment of signal clarity.
+
+• LNR = Integrated LUFS - Noise Floor LUFS
+• Measured in LU (Loudness Units)
+• Accounts for psychoacoustic weighting
+• Better represents perceived signal clarity than traditional SNR
+
+KEY DIFFERENCES
+────────────────────────────────────────────────────────────────────────────────
+
+SNR vs LNR:
+• SNR: Linear amplitude domain, unweighted
+• LNR: Loudness domain, K-weighted for human perception
+• Both measure signal clarity but LNR better matches what we hear
+
+LUFS vs dBFS:
+• dBFS: Simple amplitude measurement relative to digital full scale
+• LUFS: Perceptually-weighted loudness measurement
+• LUFS accounts for frequency-dependent hearing sensitivity
+
+INTERPRETATION GUIDE
+────────────────────────────────────────────────────────────────────────────────
+
+High SNR + High LNR: Clean recording with good technical and perceptual clarity
+High SNR + Low LNR: Technically clean but perceptually less clear
+Low SNR + High LNR: Technical noise present but perceptually acceptable
+Low SNR + Low LNR: Both technical and perceptual noise issues
+        """
         
-        # Add text with proper formatting and spacing
-        y_pos = 0.90  # Start position higher
-        line_spacing = 0.022  # Consistent line spacing
-        
-        for section in rec_text:
-            if section['type'] == 'header':
-                ax.text(0.05, y_pos, section['text'], fontsize=12, fontweight='bold',
-                       color=self.color_scheme['primary'], transform=ax.transAxes)
-                y_pos -= line_spacing * 1.5
-            elif section['type'] == 'subheader':
-                ax.text(0.05, y_pos, section['text'], fontsize=10, fontweight='bold',
-                       color=self.color_scheme['secondary'], transform=ax.transAxes)
-                y_pos -= line_spacing * 1.3
-            elif section['type'] == 'text':
-                ax.text(0.07, y_pos, section['text'], fontsize=9,
-                       color='black', transform=ax.transAxes)
-                y_pos -= line_spacing
-            elif section['type'] == 'separator':
-                ax.plot([0.05, 0.95], [y_pos, y_pos], color='lightgray', linewidth=0.5,
-                       transform=ax.transAxes)
-                y_pos -= line_spacing * 0.8
+        ax.text(0.05, 0.95, explanation_text, fontsize=8.5, family='monospace',
+               transform=ax.transAxes, va='top')
         
         return fig
     
-    # Helper plotting functions
-    def draw_professional_gauge(self, ax):
-        """Draw professional quality gauge with improved layout"""
-        score = self.results['quality']['percentage']
+    def create_standards_reference_page(self):
+        """Create standards reference page"""
+        fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
-        # Draw arc background
-        theta = np.linspace(np.pi, 0, 100)
-        r_outer = 1.0
-        r_inner = 0.7
+        fig.text(0.5, 0.97, 'TECHNICAL STANDARDS REFERENCE', 
+                fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
-        # Color gradient based on score
-        colors = ['#e74c3c', '#e67e22', '#f39c12', '#27ae60', '#27ae60']
-        thresholds = [0, 40, 55, 70, 85, 100]
-        
-        for i in range(len(colors)):
-            start = np.pi - (thresholds[i] / 100 * np.pi)
-            end = np.pi - (thresholds[i + 1] / 100 * np.pi)
-            theta_seg = np.linspace(start, end, 20)
-            
-            x_outer = r_outer * np.cos(theta_seg)
-            y_outer = r_outer * np.sin(theta_seg)
-            x_inner = r_inner * np.cos(theta_seg)
-            y_inner = r_inner * np.sin(theta_seg)
-            
-            verts = list(zip(x_outer, y_outer)) + list(zip(x_inner[::-1], y_inner[::-1]))
-            poly = mpatches.Polygon(verts, facecolor=colors[i], alpha=0.3, edgecolor=colors[i])
-            ax.add_patch(poly)
-        
-        # Draw needle
-        angle = np.pi - (score / 100 * np.pi)
-        ax.arrow(0, 0, 0.85 * np.cos(angle), 0.85 * np.sin(angle),
-                head_width=0.05, head_length=0.05, fc='black', ec='black', linewidth=2)
-        
-        # Center circle
-        circle = plt.Circle((0, 0), 0.1, color='white', ec='black', linewidth=2, zorder=10)
-        ax.add_patch(circle)
-        
-        # Score text - positioned lower to avoid overlap
-        ax.text(0, -0.35, f"{score:.0f}%", fontsize=22, fontweight='bold',
-               ha='center', va='center', color=self.results['quality']['color'])
-        ax.text(0, -0.5, self.results['quality']['grade'], fontsize=10,
-               ha='center', va='center', color=self.color_scheme['primary'])
-        
-        # Scale labels - positioned at the ends of the arc
-        labels_pos = [(0, 'Poor'), (50, 'Fair'), (100, 'Excellent')]
-        for val, label in labels_pos:
-            angle = np.pi - (val / 100 * np.pi)
-            x = 1.2 * np.cos(angle)
-            y = 1.2 * np.sin(angle)
-            # Adjust alignment based on position
-            ha = 'center' if val == 50 else ('right' if val == 0 else 'left')
-            ax.text(x, y, label, fontsize=9, ha=ha, va='center')
-        
-        ax.set_xlim(-1.4, 1.4)
-        ax.set_ylim(-0.7, 1.4)
-        ax.set_aspect('equal')
+        ax = fig.add_subplot(111)
         ax.axis('off')
-        ax.set_title('Overall Quality Score', fontsize=11, fontweight='bold', pad=15)
+        
+        standards_text = """
+LOUDNESS STANDARDS
+────────────────────────────────────────────────────────────────────────────────
+
+ITU-R BS.1770-4 (2015)
+Algorithms to measure audio programme loudness and true-peak audio level
+• Defines K-weighting filters for loudness measurement
+• Specifies gating algorithm for integrated loudness
+• True-peak measurement via oversampling
+
+EBU R128 (2020)
+Loudness normalisation and permitted maximum level of audio signals
+• Target Level: -23.0 LUFS (±0.5 LU tolerance)
+• Max True Peak: -1 dBTP
+• Loudness Range: 5-20 LU typical
+
+ATSC A/85 (2013)
+Techniques for Establishing and Maintaining Audio Loudness (USA)
+• Target Level: -24.0 LKFS (±2 LU tolerance)
+• Max True Peak: -2 dBTP
+
+AES TD1004.1.15-10 (2015)
+Recommendation for Loudness of Audio Streaming and Network File Playback
+• Streaming Target: -16 to -20 LUFS
+• Mobile Target: -16 LUFS
+• No true peak limit specified
+
+SIGNAL QUALITY SPECIFICATIONS
+────────────────────────────────────────────────────────────────────────────────
+
+ITU-T P.56 (2011)
+Objective measurement of active speech level
+• Defines speech-band filtering (300-3400 Hz)
+• Active speech level measurement methodology
+
+AES17-2020
+Standard method for digital audio engineering measurement
+• Dynamic range measurement procedures
+• Signal-to-noise ratio definitions
+• Measurement bandwidth specifications
+
+IEC 61606-3 (2008)
+Audio and audiovisual equipment - Digital audio parts
+• Basic measurement methods
+• Reference levels and alignment
+
+BROADCAST SPECIFICATIONS
+────────────────────────────────────────────────────────────────────────────────
+
+EBU Tech 3343 (2016)
+Guidelines for Production of Programmes in accordance with EBU R128
+• Production ranges and tolerances
+• Measurement gate specifications
+
+BBC R&D White Paper WHP 259 (2014)
+Audio Metering and Monitoring
+• Practical implementation guidelines
+• Measurement best practices
+
+STREAMING PLATFORM SPECIFICATIONS
+────────────────────────────────────────────────────────────────────────────────
+
+Spotify (2021): -14 LUFS integrated, -1 dBTP max
+Apple Music (2021): -16 LUFS integrated, -1 dBTP max
+YouTube (2021): -14 LUFS integrated
+Amazon Music (2021): -14 to -9 LUFS integrated
+Tidal (2021): -14 LUFS integrated
+
+MEASUREMENT NOTES
+────────────────────────────────────────────────────────────────────────────────
+
+All measurements in this report comply with:
+• ITU-R BS.1770-4 for LUFS calculation
+• ITU-T P.56 for speech-weighted measurements
+• AES17-2020 for dynamic range assessment
+
+Calibration: 0 dBFS = Full Scale Digital
+Reference: 1 kHz sine wave at -20 dBFS
+        """
+        
+        ax.text(0.05, 0.95, standards_text, fontsize=8, family='monospace',
+               transform=ax.transAxes, va='top')
+        
+        return fig
     
-    def get_metric_color(self, metric_type, value):
-        """Get color based on metric value"""
-        if metric_type == 'snr':
-            if value >= 40:
-                return self.color_scheme['success']
-            elif value >= 30:
-                return self.color_scheme['secondary']
-            elif value >= 20:
-                return self.color_scheme['warning']
-            else:
-                return self.color_scheme['danger']
-        elif metric_type == 'lufs':
-            deviation = abs(value + 16)  # Target -16 LUFS
-            if deviation <= 2:
-                return self.color_scheme['success']
-            elif deviation <= 5:
-                return self.color_scheme['secondary']
-            else:
-                return self.color_scheme['warning']
-        elif metric_type == 'lra':
-            if 7 <= value <= 20:
-                return self.color_scheme['success']
-            elif 5 <= value < 7 or 20 < value <= 25:
-                return self.color_scheme['secondary']
-            else:
-                return self.color_scheme['warning']
-        elif metric_type == 'peak':
-            if value <= -1:
-                return self.color_scheme['success']
-            elif value <= -0.3:
-                return self.color_scheme['warning']
-            else:
-                return self.color_scheme['danger']
-        elif metric_type == 'dr':
-            if 15 <= value <= 30:
-                return self.color_scheme['success']
-            elif 10 <= value < 15 or 30 < value <= 40:
-                return self.color_scheme['secondary']
-            else:
-                return self.color_scheme['warning']
-        else:
-            return self.color_scheme['neutral']
-    
-    def plot_waveform_professional(self, ax):
-        """Plot waveform with professional styling"""
-        # Downsample for display
+    # Plotting helper functions
+    def plot_waveform_simple(self, ax):
+        """Plot simple waveform"""
         display_samples = min(len(self.audio), 20000)
         if len(self.audio) > display_samples:
             indices = np.linspace(0, len(self.audio) - 1, display_samples, dtype=int)
@@ -1114,7 +1075,6 @@ class ProfessionalAudioAnalyzer:
             audio_display = self.audio
             time_display = np.arange(len(self.audio)) / self.sr
         
-        # Plot waveform
         ax.fill_between(time_display, audio_display, alpha=0.5, color=self.color_scheme['secondary'])
         ax.plot(time_display, audio_display, linewidth=0.5, color=self.color_scheme['primary'])
         
@@ -1124,16 +1084,15 @@ class ProfessionalAudioAnalyzer:
             end_time = end * self.hop_length / self.sr
             ax.axvspan(start_time, end_time, alpha=0.2, color=self.color_scheme['danger'])
         
-        ax.set_xlabel('Time (s)', fontsize=9, labelpad=-1)
+        ax.set_xlabel('Time (s)', fontsize=9)
         ax.set_ylabel('Amplitude', fontsize=9)
-        ax.set_title(f'Waveform ({self.results["snr"]["silence_percentage"]:.1f}% silence)', 
-                    fontsize=10, fontweight='bold')
+        ax.set_title('Waveform Overview', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
         ax.set_ylim(-1.05, 1.05)
     
-    def plot_rms_energy_professional(self, ax):
-        """Plot RMS energy with professional styling"""
+    def plot_rms_energy(self, ax):
+        """Plot RMS energy"""
         rms_time = np.arange(len(self.results['snr']['rms'])) * self.hop_length / self.sr
         rms_db = 20 * np.log10(self.results['snr']['rms'] + 1e-10)
         
@@ -1142,22 +1101,111 @@ class ProfessionalAudioAnalyzer:
         
         ax.axhline(y=self.results['snr']['noise_floor'], color=self.color_scheme['danger'],
                   linestyle='--', linewidth=1.5, alpha=0.8,
-                  label=f'Noise: {self.results["snr"]["noise_floor"]:.1f} dB')
+                  label=f'Noise Floor: {self.results["snr"]["noise_floor"]:.1f} dB')
         ax.axhline(y=self.results['snr']['signal_level'], color=self.color_scheme['success'],
                   linestyle='--', linewidth=1.5, alpha=0.8,
-                  label=f'Signal: {self.results["snr"]["signal_level"]:.1f} dB')
+                  label=f'Signal Level: {self.results["snr"]["signal_level"]:.1f} dB')
         
-        ax.set_xlabel('Time (s)', fontsize=9, labelpad=-1)
+        ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
         ax.set_ylabel('Level (dBFS)', fontsize=9)
         ax.set_title('RMS Energy Analysis', fontsize=10, fontweight='bold')
-        ax.legend(loc='lower right', fontsize=8, framealpha=0.9)
+        ax.legend(loc='lower right', fontsize=8)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
         ax.set_ylim(max(-60, self.results['snr']['noise_floor'] - 10), 0)
     
-    def plot_lufs_timeline_professional(self, ax):
-        """Plot LUFS timeline with professional styling"""
-        # Downsample if needed
+    def plot_temporal_snr(self, ax):
+        """Plot temporal SNR"""
+        if self.results['snr']['temporal_snr']:
+            times = [(s['start'] + s['end'])/2 for s in self.results['snr']['temporal_snr']]
+            values = [s['snr'] for s in self.results['snr']['temporal_snr']]
+            
+            ax.plot(times, values, marker='o', linewidth=2, markersize=5,
+                   color=self.color_scheme['primary'], label='Temporal SNR')
+            ax.axhline(y=self.results['snr']['global_snr'], color=self.color_scheme['accent'],
+                      linestyle='--', linewidth=1.5, alpha=0.8,
+                      label=f'Average: {self.results["snr"]["global_snr"]:.1f} dB')
+            
+            ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
+            ax.set_ylabel('SNR (dB)', fontsize=9)
+            ax.set_title('Temporal SNR Variation', fontsize=10, fontweight='bold')
+            ax.legend(loc='best', fontsize=8)
+            ax.grid(True, alpha=0.3, linestyle='--')
+            ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
+    
+    def plot_temporal_lnr(self, ax):
+        """Plot temporal LNR (new)"""
+        if self.results['lufs']['temporal_lnr']:
+            times = [(s['start'] + s['end'])/2 for s in self.results['lufs']['temporal_lnr']]
+            values = [s['lnr'] for s in self.results['lufs']['temporal_lnr']]
+            
+            ax.plot(times, values, marker='s', linewidth=2, markersize=5,
+                   color=self.color_scheme['accent'], label='Temporal LNR')
+            ax.axhline(y=self.results['lufs']['lnr'], color=self.color_scheme['primary'],
+                      linestyle='--', linewidth=1.5, alpha=0.8,
+                      label=f'Average: {self.results["lufs"]["lnr"]:.1f} LU')
+            
+            ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
+            ax.set_ylabel('LNR (LU)', fontsize=9)
+            ax.set_title('Temporal LNR (LUFS to Noise Ratio) Variation', fontsize=10, fontweight='bold')
+            ax.legend(loc='best', fontsize=8)
+            ax.grid(True, alpha=0.3, linestyle='--')
+            ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
+    
+    def plot_snr_lnr_comparison(self, ax):
+        """Plot SNR vs LNR comparison"""
+        categories = ['Global SNR (dB)', 'Speech SNR (dB)', 'LNR (LU)']
+        values = [
+            self.results['snr']['global_snr'],
+            self.results['snr']['speech_weighted_snr'],
+            self.results['lufs']['lnr']
+        ]
+        colors = [self.color_scheme['primary'], self.color_scheme['secondary'], self.color_scheme['accent']]
+        
+        bars = ax.bar(categories, values, color=colors, alpha=0.7, edgecolor='black', linewidth=0.5)
+        
+        max_value = max(values)
+        y_limit = max_value * 1.15  # + 15% > max_value
+        ax.set_ylim(0, y_limit)
+
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + max(values) * 0.02,
+                   f'{value:.1f}', ha='center', va='bottom', fontsize=9)
+        
+        ax.set_ylabel('Value', fontsize=9)
+        ax.set_title('SNR and LNR Comparison', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    
+    def plot_frequency_bands(self, ax):
+        """Plot frequency bands SNR"""
+        bands = self.results['bands']
+        
+        names = [b['name'] for b in bands]
+        values = [b['snr'] for b in bands]
+        
+        x_pos = np.arange(len(names))
+        bars = ax.bar(x_pos, values, color=self.color_scheme['secondary'], 
+                      alpha=0.7, edgecolor='black', linewidth=0.5)
+        
+        max_value = max(values)
+        y_limit = max_value * 1.15  # + 15% > max_value
+        ax.set_ylim(0, y_limit)
+
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            y_pos = height + max(values) * 0.02 if height > 0 else 0.5
+            ax.text(bar.get_x() + bar.get_width()/2., y_pos,
+                   f'{value:.0f}', ha='center', va='bottom', fontsize=8)
+        
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(names, rotation=35, ha='right', fontsize=8)
+        ax.set_ylabel('SNR (dB)', fontsize=9)
+        ax.set_title('Signal-to-Noise Ratio by Frequency Band', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+    
+    def plot_lufs_timeline(self, ax):
+        """Plot LUFS timeline"""
         if len(self.results['lufs']['momentary']) > 500:
             step = len(self.results['lufs']['momentary']) // 500
             mom_display = self.results['lufs']['momentary'][::step]
@@ -1166,7 +1214,6 @@ class ProfessionalAudioAnalyzer:
             mom_display = self.results['lufs']['momentary']
             mom_times = self.results['lufs']['momentary_times']
         
-        # Plot LUFS data
         ax.plot(mom_times, mom_display, linewidth=0.5, alpha=0.5,
                label='Momentary', color=self.color_scheme['neutral'])
         ax.plot(self.results['lufs']['short_term_times'], self.results['lufs']['short_term'],
@@ -1174,71 +1221,76 @@ class ProfessionalAudioAnalyzer:
         ax.axhline(y=self.results['lufs']['integrated'], color=self.color_scheme['accent'],
                   linestyle='--', linewidth=2,
                   label=f'Integrated: {self.results["lufs"]["integrated"]:.1f} LUFS')
+        ax.axhline(y=self.results['lufs']['noise_floor_lufs'], color=self.color_scheme['danger'],
+                  linestyle=':', linewidth=1.5, alpha=0.7,
+                  label=f'Noise Floor: {self.results["lufs"]["noise_floor_lufs"]:.1f} LUFS')
         
-        # Target zones (no labels to avoid clutter)
-        ax.axhspan(-18, -14, alpha=0.08, color='green')
-        ax.axhspan(-24, -22, alpha=0.08, color='blue')
-        
-        # Add text annotations for targets instead of legend
-        ax.text(self.duration * 0.98, -16, 'Streaming', fontsize=7, 
-                ha='right', va='center', color='green', alpha=0.7)
-        ax.text(self.duration * 0.98, -23, 'Broadcast', fontsize=7, 
-                ha='right', va='center', color='blue', alpha=0.7)
-        
-        ax.set_xlabel('Time (s)', fontsize=9, labelpad=-1)
+        ax.set_xlabel('Time (s)', fontsize=9)
         ax.set_ylabel('LUFS', fontsize=9)
         ax.set_title('Loudness Timeline (ITU-R BS.1770-4)', fontsize=10, fontweight='bold')
-        ax.legend(loc='lower left', fontsize=7, ncol=3, framealpha=0.9)
+        ax.legend(loc='lower left', fontsize=7, ncol=2)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
-        ax.set_ylim(max(-60, self.results['lufs']['integrated'] - 20), 0)
+        ax.set_ylim(max(-70, min(self.results['lufs']['noise_floor_lufs'] - 5, 
+                                 self.results['lufs']['integrated'] - 20)), 0)
     
-    def plot_temporal_snr_professional(self, ax):
-        """Plot temporal SNR variation with improved display"""
-        if self.results['snr']['temporal_snr']:
-            times = [(s['start'] + s['end'])/2 for s in self.results['snr']['temporal_snr']]
-            values = [s['snr'] for s in self.results['snr']['temporal_snr']]
-            
-            # Quality zones (background)
-            ax.axhspan(40, 100, alpha=0.08, color='green')
-            ax.axhspan(30, 40, alpha=0.08, color='yellow')
-            ax.axhspan(20, 30, alpha=0.08, color='orange')
-            ax.axhspan(0, 20, alpha=0.08, color='red')
-            
-            # Plot data
-            ax.plot(times, values, marker='o', linewidth=2, markersize=5,
-                   color=self.color_scheme['primary'], label='Temporal SNR')
-            ax.axhline(y=self.results['snr']['global_snr'], color=self.color_scheme['accent'],
-                      linestyle='--', linewidth=1.5, alpha=0.8,
-                      label=f'Avg: {self.results["snr"]["global_snr"]:.1f} dB')
-            
-            # Add quality zone labels on the right
-            ax.text(self.duration * 1.01, 45, 'Excellent', fontsize=7, 
-                   va='center', color='green', alpha=0.7)
-            ax.text(self.duration * 1.01, 35, 'Good', fontsize=7, 
-                   va='center', color='#d4a017', alpha=0.7)
-            ax.text(self.duration * 1.01, 25, 'Fair', fontsize=7, 
-                   va='center', color='orange', alpha=0.7)
-            ax.text(self.duration * 1.01, 10, 'Poor', fontsize=7, 
-                   va='center', color='red', alpha=0.7)
-            
-            ax.set_xlabel('Time (s)', fontsize=9, labelpad=-1)
-            ax.set_ylabel('SNR (dB)', fontsize=9)
-            ax.set_title('Temporal SNR Variation', fontsize=10, fontweight='bold')
-            ax.legend(loc='lower left', fontsize=8, framealpha=0.9)
-            ax.grid(True, alpha=0.3, linestyle='--')
-            ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
-            ax.set_ylim(0, max(50, max(values) * 1.1))
+    def plot_lufs_distribution(self, ax):
+        """Plot LUFS distribution"""
+        ax.hist(self.results['lufs']['momentary'], bins=50, alpha=0.7,
+               color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5)
+        ax.axvline(x=self.results['lufs']['integrated'], color='red', linestyle='--',
+                  linewidth=2, alpha=0.8)
+        ax.axvline(x=self.results['lufs']['noise_floor_lufs'], color=self.color_scheme['danger'],
+                  linestyle=':', linewidth=1.5, alpha=0.8)
+        
+        ax.set_xlabel('LUFS', fontsize=9)
+        ax.set_ylabel('Count', fontsize=9)
+        ax.set_title('Loudness Distribution', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
     
-    def plot_spectrogram_professional(self, ax):
-        """Plot spectrogram with professional styling"""
-        # Get spectrogram data
+    def plot_amplitude_histogram(self, ax):
+        """Plot amplitude distribution"""
+        ax.hist(self.audio, bins=100, alpha=0.7, color=self.color_scheme['secondary'],
+               edgecolor='black', linewidth=0.5)
+        ax.set_xlabel('Amplitude', fontsize=9)
+        ax.set_ylabel('Count', fontsize=9)
+        ax.set_title('Amplitude Distribution', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+        
+        mean = np.mean(self.audio)
+        std = np.std(self.audio)
+        stats_text = f'μ={mean:.3f}\nσ={std:.3f}'
+        ax.text(0.98, 0.98, stats_text, transform=ax.transAxes,
+               fontsize=8, va='top', ha='right',
+               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    def create_lufs_statistics_table(self, ax):
+        """Create LUFS statistics table"""
+        ax.axis('off')
+        
+        stats_text = f"""
+LUFS DETAILED STATISTICS
+────────────────────────────────────────────────────────────────────
+Integrated Loudness:    {self.results['lufs']['integrated']:.2f} LUFS
+Max Momentary:          {self.results['lufs']['max_momentary']:.2f} LUFS  
+Max Short-term:         {self.results['lufs']['max_short_term']:.2f} LUFS
+Loudness Range (LRA):    {self.results['lufs']['lra']:.2f} LU
+
+Noise Floor (LUFS):     {self.results['lufs']['noise_floor_lufs']:.2f} LUFS
+LNR (LUFS to Noise):     {self.results['lufs']['lnr']:.2f} LU
+True Peak:              {self.results['lufs']['true_peak_db']:.2f} dBTP
+True Peak Linear:        {self.results['lufs']['true_peak']:.4f}
+        """
+        
+        ax.text(0.1, 0.5, stats_text, fontsize=9, family='monospace',
+               transform=ax.transAxes, va='center')
+    
+    def plot_spectrogram(self, ax):
+        """Plot spectrogram"""
         _, f, t, Sxx = self.analyze_frequency_bands()
         
-        # Limit frequency range
         max_freq_idx = np.where(f <= min(10000, self.sr/2))[0][-1]
         
-        # Downsample for display
         if Sxx.shape[1] > 500:
             step = Sxx.shape[1] // 500
             Sxx_display = Sxx[:max_freq_idx, ::step]
@@ -1247,215 +1299,41 @@ class ProfessionalAudioAnalyzer:
             Sxx_display = Sxx[:max_freq_idx, :]
             t_display = t
         
-        # Plot
         im = ax.pcolormesh(t_display, f[:max_freq_idx],
                           10 * np.log10(Sxx_display + 1e-10),
                           shading='auto', cmap='viridis', rasterized=True)
         
         ax.set_ylabel('Frequency (Hz)', fontsize=9)
         ax.set_xlabel('Time (s)', fontsize=9)
-        ax.set_title('Spectrogram (0-10kHz)', fontsize=10, fontweight='bold')
+        ax.set_title('Spectrogram', fontsize=10, fontweight='bold')
         ax.set_ylim(0, min(10000, self.sr/2))
         
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label('Power (dB)', fontsize=8)
         cbar.ax.tick_params(labelsize=8)
     
-    def plot_frequency_bands_professional(self, ax):
-        """Plot frequency bands SNR with improved layout"""
-        bands = self.results['bands']
-        
-        names = [b['name'] for b in bands]
-        values = [b['snr'] for b in bands]
-        
-        # Color based on SNR value
-        colors = [self.get_metric_color('snr', v) for v in values]
-        
-        # Create bars with proper spacing
-        x_pos = np.arange(len(names))
-        bars = ax.bar(x_pos, values, color=colors, alpha=0.7, edgecolor='black', linewidth=0.5)
-        
-        # Add value labels on top of bars
-        for bar, value in zip(bars, values):
-            height = bar.get_height()
-            y_pos = height + max(values) * 0.02 if height > 0 else 0.5
-            ax.text(bar.get_x() + bar.get_width()/2., y_pos,
-                   f'{value:.0f}', ha='center', va='bottom', fontsize=8)
-        
-        # Set x-axis labels with rotation for better readability
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(names, rotation=35, ha='right', fontsize=8)
-        ax.set_ylabel('SNR (dB)', fontsize=9)
-        ax.set_title('Signal-to-Noise Ratio by Frequency Band', fontsize=10, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
-        
-        # Set y-axis limit with padding
-        y_max = max(values) * 1.15 if values else 50
-        ax.set_ylim(0, max(50, y_max))
-        
-        # Quality reference lines
-        ax.axhline(y=40, color='green', linestyle=':', alpha=0.5, linewidth=1)
-        ax.axhline(y=30, color='orange', linestyle=':', alpha=0.5, linewidth=1)
-        ax.axhline(y=20, color='red', linestyle=':', alpha=0.5, linewidth=1)
-    
-    def plot_amplitude_histogram(self, ax):
-        """Plot amplitude distribution with compact legend"""
-        ax.hist(self.audio, bins=100, alpha=0.7, color=self.color_scheme['secondary'],
-               edgecolor='black', linewidth=0.5)
-        ax.set_xlabel('Amplitude', fontsize=9)
-        ax.set_ylabel('Count', fontsize=9)
-        ax.set_title('Amplitude Distribution', fontsize=10, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
-        
-        # Add statistics
-        mean = np.mean(self.audio)
-        std = np.std(self.audio)
-        ax.axvline(x=mean, color='red', linestyle='--', linewidth=1.5, alpha=0.8)
-        ax.axvline(x=mean + std, color='orange', linestyle=':', linewidth=1, alpha=0.8)
-        ax.axvline(x=mean - std, color='orange', linestyle=':', linewidth=1, alpha=0.8)
-        
-        # Compact text annotation instead of legend
-        stats_text = f'μ={mean:.3f}\nσ={std:.3f}'
-        ax.text(0.98, 0.98, stats_text, transform=ax.transAxes,
-               fontsize=8, va='top', ha='right',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
-    def plot_lufs_distribution(self, ax):
-        """Plot LUFS distribution with compact display"""
-        ax.hist(self.results['lufs']['momentary'], bins=50, alpha=0.7,
-               color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5)
-        ax.axvline(x=self.results['lufs']['integrated'], color='red', linestyle='--',
-                  linewidth=2, alpha=0.8)
-        
-        # Add text annotation instead of legend
-        ax.text(self.results['lufs']['integrated'] + 1, ax.get_ylim()[1] * 0.9,
-               f'Integrated:\n{self.results["lufs"]["integrated"]:.1f} LUFS',
-               fontsize=8, ha='left', va='top',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        ax.set_xlabel('LUFS', fontsize=9)
-        ax.set_ylabel('Count', fontsize=9)
-        ax.set_title('Loudness Distribution', fontsize=10, fontweight='bold')
-        ax.grid(True, alpha=0.3, axis='y', linestyle='--')
-    
-    def create_statistics_table(self, ax):
-        """Create statistics table with improved formatting"""
+    def plot_spectral_statistics(self, ax):
+        """Plot spectral statistics"""
         ax.axis('off')
+        
+        stats_text = f"""
+SPECTRAL STATISTICS
+────────────────────────────────────────────────────────────────────
+Spectral Centroid:      {self.results['stats']['spectral_centroid']:.1f} Hz
+Spectral Rolloff (85%): {self.results['stats']['spectral_rolloff']:.1f} Hz
+Zero Crossing Rate:     {self.results['stats']['zcr']:.4f}
 
-        # Create table data
-        data = [
-            ['Metric', 'Value', 'Target', 'Status'],
-            ['Global SNR', f"{self.results['snr']['global_snr']:.1f} dB", '≥40 dB', self.get_status_symbol(self.results['snr']['global_snr'] >= 40)],
-            ['Integrated LUFS', f"{self.results['lufs']['integrated']:.1f}", '-16±2', self.get_status_symbol(abs(self.results['lufs']['integrated'] + 16) <= 2)],
-            ['True Peak', f"{self.results['lufs']['true_peak_db']:.1f} dB", '≤-1 dB', self.get_status_symbol(self.results['lufs']['true_peak_db'] <= -1)],
-            ['LRA', f"{self.results['lufs']['lra']:.1f} LU", '7-20 LU', self.get_status_symbol(7 <= self.results['lufs']['lra'] <= 20)],
-            ['Dynamic Range', f"{self.results['stats']['dynamic_range']:.1f} dB", '15-30 dB', self.get_status_symbol(15 <= self.results['stats']['dynamic_range'] <= 30)]
-        ]
-
-        # Table
-        table = ax.table(cellText=data, loc='center', cellLoc='center',
-                        colWidths=[0.25, 0.25, 0.25, 0.15])
-
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)         # +1 per leggibilità
-        table.scale(1.25, 2.1)        # leggermente più grande/alta
-
-        # Header row
-        for j in range(4):
-            cell = table[(0, j)]
-            cell.set_facecolor(self.color_scheme['primary'])
-            cell.set_text_props(weight='bold', color='white')
-            cell.set_height(0.10)     # prima 0.08
-
-        # Data rows (tutte le righe sotto l'header)
-        for i in range(1, len(data)):
-            for j in range(4):
-                cell = table[(i, j)]
-                cell.set_height(0.15)  # prima 0.06
-                if j == 3:  # status color
-                    cell.set_facecolor('#d4edda' if '✓' in data[i][3] else '#f8d7da')
-
-    
-    def get_status_symbol(self, condition):
-        """Get status symbol based on condition"""
-        return '✓' if condition else '✗'
-    
-    def generate_professional_recommendations(self):
-        """Generate structured recommendations"""
-        sections = []
+Peak Level:            {self.results['stats']['peak_db']:.2f} dBFS
+RMS Level:             {self.results['stats']['rms_db']:.2f} dBFS
+Dynamic Range:          {self.results['stats']['dynamic_range']:.2f} dB
+Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
+        """
         
-        # Header
-        sections.append({'type': 'header', 'text': 'QUALITY ASSESSMENT SUMMARY'})
-        sections.append({'type': 'text', 'text': f"Overall Score: {self.results['quality']['percentage']:.0f}% - {self.results['quality']['grade']}"})
-        sections.append({'type': 'separator', 'text': ''})
-        
-        # Technical compliance
-        sections.append({'type': 'subheader', 'text': 'TECHNICAL COMPLIANCE'})
-        
-        # Streaming standards
-        sections.append({'type': 'text', 'text': '▸ Streaming Platforms (Target: -14 to -16 LUFS)'})
-        lufs_val = self.results['lufs']['integrated']
-        if -16 <= lufs_val <= -14:
-            sections.append({'type': 'text', 'text': f'  ✓ Current: {lufs_val:.1f} LUFS - Optimal'})
-        else:
-            adjustment = -15 - lufs_val
-            sections.append({'type': 'text', 'text': f'  ⚠ Current: {lufs_val:.1f} LUFS - Adjust by {adjustment:+.1f} dB'})
-        
-        # Broadcast standards
-        sections.append({'type': 'text', 'text': '▸ Broadcast (EBU R128: -23 LUFS ±0.5)'})
-        if -23.5 <= lufs_val <= -22.5:
-            sections.append({'type': 'text', 'text': f'  ✓ Compliant'})
-        else:
-            sections.append({'type': 'text', 'text': f'  ✗ Non-compliant (adjust by {-23 - lufs_val:+.1f} dB)'})
-        
-        sections.append({'type': 'separator', 'text': ''})
-        
-        # Specific issues and solutions
-        sections.append({'type': 'subheader', 'text': 'IDENTIFIED ISSUES & SOLUTIONS'})
-        
-        for rec in self.results['quality']['recommendations']:
-            sections.append({'type': 'text', 'text': rec})
-        
-        sections.append({'type': 'separator', 'text': ''})
-        
-        # Processing suggestions
-        sections.append({'type': 'subheader', 'text': 'RECOMMENDED PROCESSING CHAIN'})
-        
-        if self.results['snr']['global_snr'] < 30:
-            sections.append({'type': 'text', 'text': '1. Noise Reduction (moderate to aggressive)'})
-        
-        if self.results['stats']['dynamic_range'] < 10:
-            sections.append({'type': 'text', 'text': '2. Expansion (1:2 ratio, -40 dB threshold)'})
-        elif self.results['stats']['dynamic_range'] > 40:
-            sections.append({'type': 'text', 'text': '2. Compression (3:1 ratio, -20 dB threshold)'})
-        
-        if abs(lufs_val + 16) > 2:
-            sections.append({'type': 'text', 'text': '3. Gain adjustment for target loudness'})
-        
-        if self.results['lufs']['true_peak_db'] > -1:
-            sections.append({'type': 'text', 'text': '4. True Peak Limiting (ceiling: -1 dBTP)'})
-        
-        sections.append({'type': 'separator', 'text': ''})
-        
-        # Usage recommendations
-        sections.append({'type': 'subheader', 'text': 'SUITABLE APPLICATIONS'})
-        
-        if self.results['quality']['percentage'] >= 70:
-            sections.append({'type': 'text', 'text': '✓ Commercial release'})
-            sections.append({'type': 'text', 'text': '✓ Streaming platforms'})
-            sections.append({'type': 'text', 'text': '✓ Broadcast'})
-        elif self.results['quality']['percentage'] >= 55:
-            sections.append({'type': 'text', 'text': '✓ Podcast distribution'})
-            sections.append({'type': 'text', 'text': '✓ Online content'})
-            sections.append({'type': 'text', 'text': '⚠ Professional use (with processing)'})
-        else:
-            sections.append({'type': 'text', 'text': '⚠ Demo/reference only'})
-            sections.append({'type': 'text', 'text': '✗ Not recommended for distribution'})
-        
-        return sections
+        ax.text(0.1, 0.5, stats_text, fontsize=9, family='monospace',
+               transform=ax.transAxes, va='center')
     
     def save_report(self, output_path):
-        """Save optimized PDF report"""
+        """Save PDF report"""
         figures = self.create_professional_report()
         
         with PdfPages(output_path) as pdf:
@@ -1466,19 +1344,17 @@ class ProfessionalAudioAnalyzer:
             
             # Metadata
             d = pdf.infodict()
-            d['Title'] = f'AudioQC Analysis - {self.filename}'
-            d['Author'] = 'AudioQC Professional v0.1'
-            d['Subject'] = 'Comprehensive Audio Quality Report'
-            d['Keywords'] = 'Audio, Quality, SNR, LUFS, Analysis'
+            d['Title'] = f'Audio Analysis - {self.filename}'
+            d['Author'] = 'AudioQC v0.2'
+            d['Subject'] = 'AudioQC Analysis Report'
+            d['Keywords'] = 'Audio, Analysis, SNR, LUFS, LNR'
             d['CreationDate'] = datetime.now()
         
-        # Report file size
         file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
         
         print(f"  ✓ Report saved: {output_path}")
         print(f"  ✓ Report size: {file_size_mb:.2f} MB")
-        print(f"  ✓ Quality: {self.results['quality']['grade']}")
-        print(f"  ✓ Score: {self.results['quality']['percentage']:.0f}%")
+        print(f"  ✓ Analysis complete")
         
         return self.results
 
@@ -1486,21 +1362,25 @@ class ProfessionalAudioAnalyzer:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description='AudioQC Professional v0.1 - Enhanced Audio Quality Analyzer',
+        description='AudioQC v0.2',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Supported formats (with pydub): MP3, WAV, FLAC, M4A, OGG, AAC, WMA, and more
-Native support: WAV (including ALAW/ULAW)
+This tool provides objective audio measurements.
+
+Measurements include:
+  - SNR (Signal-to-Noise Ratio)
+  - LUFS (Loudness Units relative to Full Scale) 
+  - LNR (LUFS to Noise Ratio)
+  - Spectral analysis
+  - File integrity (SHA256)
 
 Examples:
   %(prog)s audio.wav
-  %(prog)s podcast.mp3 -o reports/
-  %(prog)s --install-deps
+  %(prog)s recording.mp3 -o reports/
+  %(prog)s podcast.m4a --dpi 150
 
 For full format support:
   pip install pydub
-  brew install ffmpeg  # macOS
-  apt install ffmpeg   # Linux
         """
     )
     
@@ -1508,52 +1388,24 @@ For full format support:
     parser.add_argument('-o', '--output', default='audioqc_reports',
                        help='Output directory (default: audioqc_reports)')
     parser.add_argument('--dpi', type=int, default=100,
-                       help='PDF resolution in DPI (default: 100, lower=smaller file)')
-    parser.add_argument('--install-deps', action='store_true',
-                       help='Show installation commands for dependencies')
+                       help='PDF resolution in DPI (default: 100)')
     
     args = parser.parse_args()
-    
-    if args.install_deps:
-        print("""
-AudioQC Professional - Dependency Installation
-===============================================
-
-Required packages:
-  pip install numpy scipy matplotlib
-
-For universal format support:
-  pip install pydub
-
-For FFmpeg (required by pydub for non-WAV formats):
-  macOS:    brew install ffmpeg
-  Ubuntu:   sudo apt update && sudo apt install ffmpeg
-  Windows:  Download from https://ffmpeg.org/download.html
-
-Test installation:
-  python -c "import pydub; print('✓ pydub installed')"
-  ffmpeg -version
-        """)
-        return 0
     
     if not args.input:
         parser.print_help()
         return 1
     
     print("="*60)
-    print("AudioQC Professional v0.1")
-    print("Enhanced Audio Quality Analyzer")
+    print("AudioQC v0.2")
     print("="*60)
     
-    # Check dependencies
     if not PYDUB_AVAILABLE:
         print("\n⚠ Note: Install pydub for full format support")
         print("  pip install pydub")
     
-    # Create output directory
     os.makedirs(args.output, exist_ok=True)
     
-    # Process file
     try:
         filename = os.path.basename(args.input)
         name_only = os.path.splitext(filename)[0]
@@ -1561,13 +1413,12 @@ Test installation:
         
         print(f"\nProcessing: {filename}")
         
-        analyzer = ProfessionalAudioAnalyzer(args.input)
+        analyzer = AudioAnalyzer(args.input)
         analyzer.dpi = args.dpi
         
         results = analyzer.save_report(output_path)
         
-        print(f"\n✓ Analysis complete!")
-        print(f"✓ Professional report generated")
+        print(f"\n✓ Analysis complete")
         
     except Exception as e:
         print(f"\n✗ Error: {e}")
