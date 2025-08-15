@@ -1,42 +1,37 @@
 # AudioQC Professional
 
-[![Python](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 ![License](https://img.shields.io/badge/License-GNU%20GPLv3-green)
 [![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)](https://github.com/yourusername/foremhash)
 
-
-*Comprehensive audio quality analyzer with verified SNR/LUFS calculations and professional PDF reports.*
-
+*Comprehensive audio measurements (SNR/LUFS/LNR), with professional **6-page** PDF reports and file-integrity hash.*
 
 ---
 
 ## ✨ Features
 
 * **Universal loader**
-
-  * Native WAV (incl. A-law/μ-law via `wave`/`audioop`)
+  * Native WAV (incl. **A-law/μ-law** via `wave`/`audioop`)
   * Optional **any format** (MP3, M4A, FLAC, OGG, AAC, WMA…) via `pydub` + **FFmpeg**
 * **Robust SNR**
-
   * Adaptive silence detection, trimmed/median estimators, speech-weighted SNR (300–3400 Hz)
 * **Standards-based Loudness (LUFS)**
-
   * ITU-R BS.1770-4 K-weighting, absolute/relative gating, momentary/short-term/integrated
+* **LNR (LUFS-to-Noise Ratio) – NEW**
+  * Computes average and **temporal LNR** (LU = loudness units), comparing K-weighted signal LUFS to noise LUFS
 * **True Peak estimate**
-
   * 4× oversampling true-peak (dBTP) check
-* **Frequency analysis**
-
-  * Spectrogram, band SNR (Sub-bass → Brilliance), amplitude & loudness distributions
-* **Executive scoring**
-
-  * Overall quality score + recommendations for streaming/broadcast/podcast targets
-* **Professional PDF output**
-
-  * 4 pages (A4): Executive Summary, Technical Analysis, Spectral Analysis, Recommendations
+* **Frequency & spectral analysis**
+  * Spectrogram; SNR by bands (Sub-bass → Brilliance); **spectral stats** (centroid, roll-off, ZCR)
+* **Professional PDF output (A4, 6 pages)**
+  1) Executive Summary (with **SHA256**),  
+  2) **SNR & LNR** Analysis,  
+  3) **Loudness (LUFS)**,  
+  4) Spectral Analysis,  
+  5) **Measurement Explanations**,  
+  6) **Standards Reference**
 * **Practical ergonomics**
-
-  * Auto mono conversion when multi-channel, metadata shown, adjustable DPI
+  * Auto mono conversion for multi-channel, metadata display, adjustable DPI, clean layout
 
 ---
 
@@ -54,7 +49,7 @@ pip install numpy scipy matplotlib
 
 # full (all common formats)
 pip install numpy scipy matplotlib pydub
-```
+````
 
 **FFmpeg** (required by `pydub` for MP3/M4A/…):
 
@@ -63,13 +58,7 @@ pip install numpy scipy matplotlib pydub
 * Windows (Chocolatey): `choco install ffmpeg`
   or download from ffmpeg.org and add `ffmpeg` to PATH.
 
-Handy helper in the tool:
-
-```bash
-python audioqc.py --install-deps
-```
-
-> 📦 (Optional) Create a `requirements.txt`
+> 📦 (Optional) `requirements.txt`
 >
 > ```
 > numpy
@@ -96,16 +85,17 @@ python audioqc.py podcast.mp3 -o reports/ --dpi 120
 
 Command-line options:
 
-| Flag             |           Default | Description                                          |
-| ---------------- | ----------------: | ---------------------------------------------------- |
-| `input`          |                 — | Path to the audio file to analyze                    |
-| `-o, --output`   | `audioqc_reports` | Output directory for the PDF report                  |
-| `--dpi`          |             `100` | DPI for PDF figures (higher = sharper & larger file) |
-| `--install-deps` |                 — | Prints platform-specific install tips                |
+| Flag           |           Default | Description                                          |
+| -------------- | ----------------: | ---------------------------------------------------- |
+| `input`        |                 — | Path to the audio file to analyze                    |
+| `-o, --output` | `audioqc_reports` | Output directory for the PDF report                  |
+| `--dpi`        |             `100` | DPI for PDF figures (higher = sharper & larger file) |
 
 Output:
 
 * A PDF report at: `audioqc_reports/<filename>_analysis.pdf`
+  (Path, file size, and basic info are printed in the console. The PDF embeds metadata:
+  Title/Author/Subject/Keywords.)
 
 ---
 
@@ -113,75 +103,87 @@ Output:
 
 **Page 1 – Executive Summary**
 
-* File metadata (format, channels, SR, duration, size, bit depth)
-* Overall quality **gauge** + grade
-* Key metrics cards: Global SNR, LUFS (integrated), LRA, True Peak, Dynamic Range, Noise Floor
-* Top findings & recommendations
+* File metadata: format, channels, sample rate, duration, size, bit depth, **SHA256**
+* Key measurements table:
 
-**Page 2 – Technical Analysis**
+  * Global SNR, **Speech-weighted SNR**, **LNR (LUFS-to-Noise)**, Integrated LUFS, Max Momentary, Max Short-term, **LRA**, **True Peak (dBTP)**, Noise Floor (dBFS & LUFS), Signal Level, **Dynamic Range**, **Crest Factor**, **Silence %**
+* Waveform overview with **silence regions** shading
+* Footer with analysis date & environment
 
-* Waveform with **silence shading**
-* RMS energy with **noise floor** / **signal level**
-* Loudness timeline (momentary, short-term, integrated line)
-* Temporal SNR plot
-* Compact **statistics table**
+**Page 2 – SNR & LNR Analysis (NEW)**
 
-**Page 3 – Spectral Analysis**
-
-* Spectrogram (0–10 kHz)
+* RMS energy with **Noise Floor** / **Signal Level**
+* **Temporal SNR** timeline
+* **Temporal LNR** timeline (new metric)
+* **SNR vs LNR** comparison chart
 * SNR by frequency band
-* Amplitude & LUFS distributions
 
-**Page 4 – Recommendations**
+**Page 3 – Loudness (LUFS)**
 
-* Compliance vs. streaming/broadcast targets
-* Issues & suggested processing chain
-* Suitable applications
+* Loudness timeline (Momentary, Short-term, Integrated line)
+* LUFS distribution & amplitude histogram
+* **LUFS detailed statistics** table (Integrated, Max M/ST, LRA, Noise Floor LUFS, **LNR**, **True Peak**)
+
+**Page 4 – Spectral Analysis**
+
+* Spectrogram (up to Nyquist)
+* **Spectral statistics**: centroid, roll-off (≈85%), zero-crossing rate, peak & RMS levels
+
+**Page 5 – Measurement Explanations**
+
+* Plain-English notes on **SNR**, **LUFS (BS.1770-4)**, **LNR** and an interpretation guide
+
+**Page 6 – Technical Standards Reference**
+
+* Summaries: ITU-R BS.1770-4, EBU R128, ATSC A/85, streaming targets, and measurement notes/calibration
 
 ---
 
 ## 📐 Metrics (how they’re computed)
 
 * **Global SNR (dB)**
-  Adaptive silence detection → median noise RMS + trimmed mean signal RMS → `20·log10(signal/noise)`
+  Adaptive silence detection → noise RMS (median/percentile) & signal RMS (trimmed mean) → `20·log10(signal/noise)`
 * **Speech-weighted SNR**
-  4th-order Butterworth band-pass 300–3400 Hz, then SNR as above
+  4th-order Butterworth band-pass **300–3400 Hz**, then SNR as above
 * **LUFS** (BS.1770-4)
-  K-weighting (high-shelf + high-pass), 400 ms momentary, 3 s short-term, integrated with absolute (-70 LUFS) and relative (-10 LU) gating
+  K-weighting; momentary (400 ms), short-term (3 s), integrated with absolute (-70 LUFS) and relative (-10 LU) gating
+* **LNR (LUFS-to-Noise, LU)** – **NEW**
+  Compute **signal LUFS** (K-weighted) and **noise LUFS** (K-weighted; from silent/low-energy portions);
+  `LNR = signal_LUFS − noise_LUFS`. Also reported **temporal LNR** over sliding windows.
 * **True Peak (dBTP)**
-  4× oversampled peak
+  4× oversampled peak amplitude → `20·log10(|peak|)`
 * **Dynamic Range (dB)**
-  Percentile-based range of **active** RMS frames (10th → 95th), gated by silence mask
+  Percentile range of **active** RMS frames (10th → 95th), gated by silence mask
 * **LRA (LU)**
-  95th – 10th percentile of short-term LUFS
+  95th − 10th percentile of short-term LUFS
+* **Spectral stats**
+  Spectral centroid & roll-off (≈85%), zero-crossing rate
 
-> Note: True-peak estimation is approximate (oversampling FIR vs. full inter-sample peak detection); for mastering-grade TP, use a dedicated TP meter as well.
+> Note: True-peak is an estimate; for mastering-grade TP use a dedicated meter as well.
 
 ---
 
 ## 🎛️ Tips & Tuning
 
 * **File size vs. quality**: Increase `--dpi` for sharper plots; decrease for smaller PDFs.
-* **Silence detection**: See `detect_silence()` for threshold/duration settings.
-* **Performance**: Very long files benefit from a lower DPI and/or reducing spectrogram resolution.
-* **Layout**: The script saves with `bbox_inches='tight'` to compact margins.
-  If legends or annotations fall outside axes in your environment, remove `bbox_inches='tight'` in `save_report()`.
+* **Silence detection**: Tunable percentile & minimum duration in `detect_silence()`.
+* **Performance**: Very long files benefit from lower DPI and/or reduced spectrogram resolution.
+* **Layout**: Reports save with `bbox_inches='tight'` (adjust in `save_report()` if legends/annotations clip).
 
 ---
 
 ## 🩺 Troubleshooting
 
-* “**pydub not installed**” / “**Limited to WAV**”
-  → `pip install pydub` and install FFmpeg (see install section).
-* “**Could not load audio file**”
-  → Check path & permissions; for exotic containers/codecs ensure FFmpeg decodes them.
-* **Very high/low SNR**
-  → Your content might be very quiet or very dynamic. Adjust silence parameters or verify the recording chain.
-* **Clipped True Peak**
-  → Mastering limiter suggested; target ≤ **-1 dBTP**.
+* “**pydub not installed**” / “**Limited to WAV**” → `pip install pydub` and install FFmpeg.
+* “**Could not load audio file**” → Check path & permissions; ensure FFmpeg decodes exotic codecs.
+* **Very high/low SNR** → Content may be very quiet/dynamic; tweak silence parameters.
+* **Clipped True Peak** → Use a limiter; target ≤ **-1 dBTP**.
 
 ---
 
 ## 📜 License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 — see the [LICENSE](LICENSE) file for details.
+
+```
+```
