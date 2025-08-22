@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 AudioQC v0.3 - Professional Audio Quality Control Tool
 Main entry point and coordinator
