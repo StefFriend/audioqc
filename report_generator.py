@@ -389,6 +389,14 @@ Ergonomics - Assessment of speech communication
 • Quality categories for different applications
 • Environmental correction factors
 
+IMPLEMENTATION REFERENCE (INSPIRATION)
+Costantini, G., Paoloni, A., & Todisco, M. (2010)
+"Objective Speech Intelligibility Measures Based on Speech Transmission Index for Forensic Applications"
+AES 39th International Conference, Hillerød, Denmark
+• Our STI implementation follows a modulation-transfer, octave-band framework aligned with IEC 60268-16
+• Uses envelope extraction and the 14 standard modulation frequencies (0.63–12.5 Hz)
+• Adds sliding-window temporal STI and band-weighted averaging for reporting
+
 SIGNAL QUALITY SPECIFICATIONS
 ────────────────────────────────────────────────────────────────────────────────
 
