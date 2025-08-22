@@ -1,4 +1,14 @@
-numpy
-scipy
-matplotlib
-pydub  # optional
+# AudioQC v0.3 Requirements
+# Core dependencies
+numpy>=1.19.0
+scipy>=1.5.0
+matplotlib>=3.3.0
+soundfile>=0.10.0
+
+# Optional but recommended for full format support
+pydub>=0.24.0
+
+# For pydub to work with various formats, you also need ffmpeg:
+# - Windows: Download from https://ffmpeg.org/download.html
+# - macOS: brew install ffmpeg
+# - Linux: sudo apt-get install ffmpeg (Ubuntu/Debian) or equivalent
