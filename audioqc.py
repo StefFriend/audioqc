@@ -11,6 +11,8 @@ import glob
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 
 # Import modular components
 from audio_loader import AudioLoader
@@ -158,15 +160,26 @@ class AudioAnalyzer:
         return figures
     
     def save_report(self, output_path):
-        """Save PDF report"""
+        """Save PDF report with fixed A4 page size (no auto-cropping)"""
         figures = self.create_report()
-        
+
+        # Prevent any global style from forcing tight cropping
+        mpl.rcParams['savefig.bbox'] = 'standard'          # NOT 'tight'
+        mpl.rcParams['figure.constrained_layout.use'] = False
+
         with PdfPages(output_path) as pdf:
             for fig in figures:
-                pdf.savefig(fig, dpi=self.dpi, bbox_inches='tight',
-                          pad_inches=0.3, facecolor='white')
+                # Ensure A4 portrait size is respected on every page
+                fig.set_size_inches(8.27, 11.69)
+                pdf.savefig(
+                    fig,
+                    dpi=self.dpi,
+                    bbox_inches=None,                      # <-- key change
+                    facecolor='white'
+                    # pad_inches is ignored when bbox_inches=None, so omit it
+                )
                 plt.close(fig)
-            
+
             # Metadata
             d = pdf.infodict()
             d['Title'] = f'Audio Analysis - {self.filename}'
@@ -174,14 +187,13 @@ class AudioAnalyzer:
             d['Subject'] = 'AudioQC Analysis Report'
             d['Keywords'] = 'Audio, Analysis, SNR, LUFS, LNR, STI'
             d['CreationDate'] = datetime.now()
-        
+
         file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-        
         print(f"  ✓ Report saved: {output_path}")
         print(f"  ✓ Report size: {file_size_mb:.2f} MB")
         print(f"  ✓ Analysis complete")
-        
         return self.results
+
 
 
 def main():

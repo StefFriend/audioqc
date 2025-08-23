@@ -1,12 +1,13 @@
 """
 Report Generator Module for AudioQC
 Handles PDF report generation with all analysis results
-Complete version with all methods
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib as mpl
 import matplotlib.patches as mpatches
 from datetime import datetime
 
@@ -28,6 +29,9 @@ class ReportGenerator:
         self.metadata = data['metadata']
         self.dpi = data['dpi']
         
+        # Store analysis date for consistent footer
+        self.analysis_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
         # Color scheme
         self.color_scheme = {
             'primary': '#1e3a5f',      # Dark blue
@@ -38,6 +42,12 @@ class ReportGenerator:
             'danger': '#e74c3c',       # Red
             'neutral': '#95a5a6'       # Gray
         }
+    
+    def add_footer(self, fig):
+        """Add footer to any figure"""
+        footer_text = f"AudioQC v 0.3 - Analysis Date: {self.analysis_date}"
+        fig.text(0.5, 0.01, footer_text, fontsize=8, ha='center', va='center',
+                color='gray', style='italic')
     
     def create_all_pages(self):
         """Create all report pages"""
@@ -59,7 +69,7 @@ class ReportGenerator:
         fig4 = self.create_spectral_analysis_page()
         figures.append(fig4)
         
-        # Page 5: STI Analysis (NEW)
+        # Page 5: STI Analysis
         fig5 = self.create_sti_analysis_page()
         figures.append(fig5)
         
@@ -73,6 +83,20 @@ class ReportGenerator:
         
         return figures
     
+    def save_pdf(self, out_path="AudioQC_Report.pdf"):
+        # lock page size and prevent auto-cropping
+        mpl.rcParams['savefig.bbox'] = 'standard'          # NOT 'tight'
+        mpl.rcParams['figure.constrained_layout.use'] = False
+        mpl.rcParams['savefig.pad_inches'] = 0.25
+
+        figs = self.create_all_pages()
+        with PdfPages(out_path) as pdf:
+            for fig in figs:
+                fig.set_size_inches(8.27, 11.69)           # A4 portrait
+                pdf.savefig(fig, bbox_inches=None)         # keep full page
+                plt.close(fig)
+
+    
     def create_executive_summary_page(self):
         """Create executive summary page with file hash and measurements"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
@@ -83,85 +107,87 @@ class ReportGenerator:
         fig.text(0.5, 0.94, 'Technical Measurements', 
                 fontsize=14, ha='center', color=self.color_scheme['secondary'])
         
-        # Grid
-        gs = GridSpec(6, 3, figure=fig, hspace=0.5, wspace=0.4,
-                     top=0.90, bottom=0.05, left=0.08, right=0.92)
+        # Grid - adjusted for better centering (reduced from 6 to 5 since we remove STI quality)
+        gs = GridSpec(5, 1, figure=fig, hspace=0.4,
+                     top=0.89, bottom=0.07, left=0.1, right=0.9)
         
         # File information with hash
-        ax_info = fig.add_subplot(gs[0, :])
+        ax_info = fig.add_subplot(gs[0])
         ax_info.axis('off')
         
-        info_rect = mpatches.FancyBboxPatch((0.02, 0.05), 0.96, 0.9,
+        # Center the info box better
+        info_rect = mpatches.FancyBboxPatch((0.05, 0.1), 0.9, 0.85,
                                            boxstyle="round,pad=0.02",
                                            facecolor='#f8f9fa',
                                            edgecolor=self.color_scheme['primary'],
                                            linewidth=2)
         ax_info.add_patch(info_rect)
         
-        info_text = f"""
-  File: {self.filename}
-  SHA256: {self.file_hash}
-  Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)} | Sample Rate: {self.sr} Hz
-  Duration: {self.duration:.2f}s | Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}
-        """
-        ax_info.text(0.5, 0.5, info_text, fontsize=9, ha='center', va='center',
+        info_text = f"""File: {self.filename}
+SHA256: {self.file_hash}
+Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)} | Sample Rate: {self.sr} Hz
+Duration: {self.duration:.2f}s | Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}"""
+        
+        ax_info.text(0.5, 0.5, info_text, fontsize=8.5, ha='center', va='center',
                     transform=ax_info.transAxes, family='monospace')
         
-        # Key measurements table
-        ax_table = fig.add_subplot(gs[1:3, :])
+        # Key measurements table - more compact
+        ax_table = fig.add_subplot(gs[1:3])
         ax_table.axis('off')
         
-        measurements = [
-            ['Measurement', 'Value', 'Unit'],
-            ['', '', ''],
-            ['SIGNAL METRICS', '', ''],
-            ['Global SNR', f"{self.results['snr']['global_snr']:.1f}", 'dB'],
-            ['Speech-weighted SNR', f"{self.results['snr']['speech_weighted_snr']:.1f}", 'dB'],
-            ['LNR (LUFS to Noise)', f"{self.results['lufs']['lnr']:.1f}", 'LU'],
-            ['STI (Speech Transmission)', f"{self.results['sti']['overall_sti']:.3f}", ''],
-            ['', '', ''],
-            ['LOUDNESS', '', ''],
-            ['Integrated LUFS', f"{self.results['lufs']['integrated']:.1f}", 'LUFS'],
-            ['Max Momentary', f"{self.results['lufs']['max_momentary']:.1f}", 'LUFS'],
-            ['Max Short-term', f"{self.results['lufs']['max_short_term']:.1f}", 'LUFS'],
-            ['Loudness Range (LRA)', f"{self.results['lufs']['lra']:.1f}", 'LU'],
-            ['', '', ''],
-            ['LEVELS', '', ''],
-            ['True Peak', f"{self.results['lufs']['true_peak_db']:.1f}", 'dBTP'],
-            ['Noise Floor (dB)', f"{self.results['snr']['noise_floor']:.1f}", 'dBFS'],
-            ['Noise Floor (LUFS)', f"{self.results['lufs']['noise_floor_lufs']:.1f}", 'LUFS'],
-            ['Signal Level', f"{self.results['snr']['signal_level']:.1f}", 'dBFS'],
-            ['', '', ''],
-            ['DYNAMICS', '', ''],
-            ['Dynamic Range', f"{self.results['stats']['dynamic_range']:.1f}", 'dB'],
-            ['Crest Factor', f"{self.results['snr']['crest_factor']:.1f}", 'dB'],
-            ['Silence', f"{self.results['snr']['silence_percentage']:.1f}", '%']
-        ]
+        # More compact measurements with STI properly included
+        measurements_text = """SIGNAL METRICS
+────────────────────────────────────────────────────────────
+  Global SNR                        {:>10.1f} dB
+  Speech-weighted SNR               {:>10.1f} dB
+  LNR (LUFS to Noise)               {:>10.1f} LU
+  STI                               {:>10.3f} 
+
+LOUDNESS
+────────────────────────────────────────────────────────────
+  Integrated LUFS                   {:>10.1f} LUFS
+  Max Momentary                     {:>10.1f} LUFS
+  Max Short-term                    {:>10.1f} LUFS
+  Loudness Range (LRA)              {:>10.1f} LU  
+
+LEVELS
+────────────────────────────────────────────────────────────
+  True Peak                         {:>10.1f} dBTP
+  Noise Floor (dB)                  {:>10.1f} dBFS
+  Noise Floor (LUFS)                {:>10.1f} LUFS
+  Signal Level                      {:>10.1f} dBFS
+
+DYNAMICS
+────────────────────────────────────────────────────────────
+  Dynamic Range                     {:>10.1f} dB
+  Crest Factor                      {:>10.1f} dB
+  Silence                           {:>10.1f} %""".format(
+            self.results['snr']['global_snr'],
+            self.results['snr']['speech_weighted_snr'],
+            self.results['lufs']['lnr'],
+            self.results['sti']['overall_sti'],
+            self.results['lufs']['integrated'],
+            self.results['lufs']['max_momentary'],
+            self.results['lufs']['max_short_term'],
+            self.results['lufs']['lra'],
+            self.results['lufs']['true_peak_db'],
+            self.results['snr']['noise_floor'],
+            self.results['lufs']['noise_floor_lufs'],
+            self.results['snr']['signal_level'],
+            self.results['stats']['dynamic_range'],
+            self.results['snr']['crest_factor'],
+            self.results['snr']['silence_percentage']
+        )   
         
-        # Create formatted table
-        table_text = ""
-        for row in measurements:
-            if row[0] in ['SIGNAL METRICS', 'LOUDNESS', 'LEVELS', 'DYNAMICS']:
-                table_text += f"\n{row[0]}\n" + "─" * 60 + "\n"
-            elif row[0] != '':
-                table_text += f"  {row[0]:<25} {row[1]:>15} {row[2]:>10}\n"
+        ax_table.text(0.5, 0.5, measurements_text, fontsize=8.5, family='monospace',
+                     transform=ax_table.transAxes, va='center', ha='center')
         
-        ax_table.text(0.1, 0.5, table_text, fontsize=9, family='monospace',
-                     transform=ax_table.transAxes, va='center')
-        
-        # Waveform preview
-        ax_wave = fig.add_subplot(gs[3:5, :])
+        # Waveform preview - now takes the remaining space
+        ax_wave = fig.add_subplot(gs[3:])
         self.plot_waveform_simple(ax_wave)
         
-        # Footer
-        ax_footer = fig.add_subplot(gs[5, :])
-        ax_footer.axis('off')
-        footer_text = f"""
-Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-AudioQC v0.3
-        """
-        ax_footer.text(0.5, 0.5, footer_text, fontsize=8, ha='center', va='center',
-                      transform=ax_footer.transAxes, color='gray')
+        # Add footer
+        self.add_footer(fig)
         
         return fig
     
@@ -173,8 +199,8 @@ AudioQC v0.3
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
         gs = GridSpec(5, 2, figure=fig, hspace=0.45, wspace=0.35,
-                     top=0.93, bottom=0.04, left=0.08, right=0.95)
-        
+                     top=0.89, bottom=0.07, left=0.1, right=0.9)
+                
         # RMS Energy with noise floor
         ax_rms = fig.add_subplot(gs[0, :])
         self.plot_rms_energy(ax_rms)
@@ -195,6 +221,9 @@ AudioQC v0.3
         ax_bands = fig.add_subplot(gs[4, :])
         self.plot_frequency_bands(ax_bands)
         
+        # Add footer
+        self.add_footer(fig)
+        
         return fig
     
     def create_lufs_analysis_page(self):
@@ -205,7 +234,7 @@ AudioQC v0.3
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
         gs = GridSpec(4, 2, figure=fig, hspace=0.35, wspace=0.35,
-                     top=0.93, bottom=0.04, left=0.08, right=0.95)
+                     top=0.93, bottom=0.05, left=0.08, right=0.95)
         
         # LUFS Timeline
         ax_lufs = fig.add_subplot(gs[0:2, :])
@@ -223,6 +252,9 @@ AudioQC v0.3
         ax_stats = fig.add_subplot(gs[3, :])
         self.create_lufs_statistics_table(ax_stats)
         
+        # Add footer
+        self.add_footer(fig)
+        
         return fig
     
     def create_spectral_analysis_page(self):
@@ -233,7 +265,7 @@ AudioQC v0.3
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
         gs = GridSpec(3, 1, figure=fig, hspace=0.35,
-                     top=0.93, bottom=0.04, left=0.08, right=0.95)
+                     top=0.93, bottom=0.05, left=0.08, right=0.95)
         
         # Spectrogram
         ax_spec = fig.add_subplot(gs[0:2])
@@ -243,17 +275,20 @@ AudioQC v0.3
         ax_stats = fig.add_subplot(gs[2])
         self.plot_spectral_statistics(ax_stats)
         
+        # Add footer
+        self.add_footer(fig)
+        
         return fig
     
     def create_sti_analysis_page(self):
-        """Create STI analysis page (NEW)"""
+        """Create STI analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
         fig.text(0.5, 0.97, 'STI (SPEECH TRANSMISSION INDEX) ANALYSIS', 
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
         
         gs = GridSpec(5, 2, figure=fig, hspace=0.4, wspace=0.35,
-                     top=0.93, bottom=0.04, left=0.08, right=0.95)
+                     top=0.93, bottom=0.05, left=0.08, right=0.95)
         
         # STI over time
         ax_sti = fig.add_subplot(gs[0:2, :])
@@ -274,6 +309,9 @@ AudioQC v0.3
         # STI interpretation guide
         ax_guide = fig.add_subplot(gs[4, :])
         self.create_sti_interpretation_guide(ax_guide)
+        
+        # Add footer
+        self.add_footer(fig)
         
         return fig
     
@@ -343,8 +381,11 @@ SNR vs LNR vs STI:
 • All assess clarity but from different perspectives
         """
         
-        ax.text(0.05, 0.95, explanation_text, fontsize=8.5, family='monospace',
+        ax.text(0.05, 0.94, explanation_text, fontsize=8.5, family='monospace',
                transform=ax.transAxes, va='top')
+        
+        # Add footer
+        self.add_footer(fig)
         
         return fig
     
@@ -389,14 +430,6 @@ Ergonomics - Assessment of speech communication
 • Quality categories for different applications
 • Environmental correction factors
 
-IMPLEMENTATION REFERENCE (INSPIRATION)
-Costantini, G., Paoloni, A., & Todisco, M. (2010)
-"Objective Speech Intelligibility Measures Based on Speech Transmission Index for Forensic Applications"
-AES 39th International Conference, Hillerød, Denmark
-• Our STI implementation follows a modulation-transfer, octave-band framework aligned with IEC 60268-16
-• Uses envelope extraction and the 14 standard modulation frequencies (0.63–12.5 Hz)
-• Adds sliding-window temporal STI and band-weighted averaging for reporting
-
 SIGNAL QUALITY SPECIFICATIONS
 ────────────────────────────────────────────────────────────────────────────────
 
@@ -433,8 +466,11 @@ Calibration: 0 dBFS = Full Scale Digital
 Reference: 1 kHz sine wave at -20 dBFS
         """
         
-        ax.text(0.05, 0.95, standards_text, fontsize=8, family='monospace',
+        ax.text(0.05, 0.94, standards_text, fontsize=8, family='monospace',
                transform=ax.transAxes, va='top')
+        
+        # Add footer
+        self.add_footer(fig)
         
         return fig
     
@@ -775,7 +811,7 @@ Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
             
             ax.set_xlabel('STI', fontsize=9)
             ax.set_ylabel('Count', fontsize=9)
-            ax.set_title('STI Distribution', fontsize=10, fontweight='bold', pad=2)
+            ax.set_title('STI Distribution', fontsize=10, fontweight='bold')
             ax.grid(True, alpha=0.3, axis='y', linestyle='--')
             ax.set_xlim(0, 1)
     
