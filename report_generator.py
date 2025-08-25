@@ -96,6 +96,24 @@ class ReportGenerator:
                 pdf.savefig(fig, bbox_inches=None)         # keep full page
                 plt.close(fig)
 
+    def _fmt_row(self, label, value, unit="", vfmt="{:.1f}"):
+        """Format a measurement row with proper alignment"""
+        label_width = 34  # Width for label column
+        value_width = 10  # Width for value column
+        
+        # Format the value
+        formatted_value = vfmt.format(value)
+        
+        # Create the full value + unit string
+        if unit:
+            value_unit = f"{formatted_value} {unit}"
+        else:
+            value_unit = formatted_value
+        
+        # Pad label and right-align value+unit
+        return f"  {label:<{label_width}}{value_unit:>{value_width+5}}"
+
+
     
     def create_executive_summary_page(self):
         """Create executive summary page with file hash and measurements"""
@@ -109,7 +127,7 @@ class ReportGenerator:
         
         # Grid - adjusted for better centering (reduced from 6 to 5 since we remove STI quality)
         gs = GridSpec(5, 1, figure=fig, hspace=0.4,
-                     top=0.89, bottom=0.07, left=0.1, right=0.9)
+                    top=0.89, bottom=0.07, left=0.1, right=0.9)
         
         # File information with hash
         ax_info = fig.add_subplot(gs[0])
@@ -117,16 +135,17 @@ class ReportGenerator:
         
         # Center the info box better
         info_rect = mpatches.FancyBboxPatch((0.05, 0.1), 0.9, 0.85,
-                                           boxstyle="round,pad=0.02",
-                                           facecolor='#f8f9fa',
-                                           edgecolor=self.color_scheme['primary'],
-                                           linewidth=2)
+                                        boxstyle="round,pad=0.02",
+                                        facecolor='#f8f9fa',
+                                        edgecolor=self.color_scheme['primary'],
+                                        linewidth=2)
         ax_info.add_patch(info_rect)
         
         info_text = f"""File: {self.filename}
-SHA256: {self.file_hash}
-Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)} | Sample Rate: {self.sr} Hz
-Duration: {self.duration:.2f}s | Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}"""
+    SHA256: {self.file_hash}
+    Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)}
+    Sample Rate: {self.sr} Hz | Duration: {self.duration:.2f}s
+    Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}"""
         
         ax_info.text(0.5, 0.5, info_text, fontsize=8.5, ha='center', va='center',
                     transform=ax_info.transAxes, family='monospace')
@@ -136,51 +155,43 @@ Duration: {self.duration:.2f}s | Size: {self.file_size:.2f} MB | Bit Depth: {sel
         ax_table.axis('off')
         
         # More compact measurements with STI properly included
-        measurements_text = """SIGNAL METRICS
-────────────────────────────────────────────────────────────
-  Global SNR                        {:>10.1f} dB
-  Speech-weighted SNR               {:>10.1f} dB
-  LNR (LUFS to Noise)               {:>10.1f} LU
-  STI                               {:>10.3f} 
-
-LOUDNESS
-────────────────────────────────────────────────────────────
-  Integrated LUFS                   {:>10.1f} LUFS
-  Max Momentary                     {:>10.1f} LUFS
-  Max Short-term                    {:>10.1f} LUFS
-  Loudness Range (LRA)              {:>10.1f} LU  
-
-LEVELS
-────────────────────────────────────────────────────────────
-  True Peak                         {:>10.1f} dBTP
-  Noise Floor (dB)                  {:>10.1f} dBFS
-  Noise Floor (LUFS)                {:>10.1f} LUFS
-  Signal Level                      {:>10.1f} dBFS
-
-DYNAMICS
-────────────────────────────────────────────────────────────
-  Dynamic Range                     {:>10.1f} dB
-  Crest Factor                      {:>10.1f} dB
-  Silence                           {:>10.1f} %""".format(
-            self.results['snr']['global_snr'],
-            self.results['snr']['speech_weighted_snr'],
-            self.results['lufs']['lnr'],
-            self.results['sti']['overall_sti'],
-            self.results['lufs']['integrated'],
-            self.results['lufs']['max_momentary'],
-            self.results['lufs']['max_short_term'],
-            self.results['lufs']['lra'],
-            self.results['lufs']['true_peak_db'],
-            self.results['snr']['noise_floor'],
-            self.results['lufs']['noise_floor_lufs'],
-            self.results['snr']['signal_level'],
-            self.results['stats']['dynamic_range'],
-            self.results['snr']['crest_factor'],
-            self.results['snr']['silence_percentage']
-        )   
+        measurements_text = "\n".join([
+            "SIGNAL METRICS",
+            "────────────────────────────────────────────────────────────",
+            self._fmt_row("Global SNR",              self.results['snr']['global_snr'],          "dB"),
+            self._fmt_row("Speech-weighted SNR",     self.results['snr']['speech_weighted_snr'], "dB"),
+            self._fmt_row("LNR (LUFS to Noise)",     self.results['lufs']['lnr'],                "LU"),
+            self._fmt_row("STI",                     self.results['sti']['overall_sti'],         "",    vfmt="{:.3f}"),
+            "",
+            "LOUDNESS",
+            "────────────────────────────────────────────────────────────",
+            self._fmt_row("Integrated LUFS",         self.results['lufs']['integrated'],         "LUFS"),
+            self._fmt_row("Max Momentary",           self.results['lufs']['max_momentary'],      "LUFS"),
+            self._fmt_row("Max Short-term",          self.results['lufs']['max_short_term'],     "LUFS"),
+            self._fmt_row("Loudness Range (LRA)",    self.results['lufs']['lra'],                "LU"),
+            "",
+            "LEVELS",
+            "────────────────────────────────────────────────────────────",
+            self._fmt_row("True Peak",               self.results['lufs']['true_peak_db'],       "dBTP"),
+            self._fmt_row("Noise Floor (dB)",        self.results['snr']['noise_floor'],         "dBFS"),
+            self._fmt_row("Noise Floor (LUFS)",      self.results['lufs']['noise_floor_lufs'],   "LUFS"),
+            self._fmt_row("Signal Level",            self.results['snr']['signal_level'],        "dBFS"),
+            "",
+            "DYNAMICS",
+            "────────────────────────────────────────────────────────────",
+            self._fmt_row("Dynamic Range",           self.results['stats']['dynamic_range'],     "dB"),
+            self._fmt_row("Crest Factor",            self.results['snr']['crest_factor'],        "dB"),
+            self._fmt_row("Silence",                 self.results['snr']['silence_percentage'],  "%"),
+        ])
         
-        ax_table.text(0.5, 0.5, measurements_text, fontsize=8.5, family='monospace',
-                     transform=ax_table.transAxes, va='center', ha='center')
+        ax_table.text(
+            0.06, 0.5, measurements_text,
+            fontsize=8.5,
+            family='DejaVu Sans Mono',   # reliable monospace
+            transform=ax_table.transAxes,
+            va='center',
+            ha='left'
+        )
         
         # Waveform preview - now takes the remaining space
         ax_wave = fig.add_subplot(gs[3:])
