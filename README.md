@@ -1,10 +1,10 @@
-# AudioQC Professional
+# AudioQC
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 ![License](https://img.shields.io/badge/License-GNU%20GPLv3-green)
 [![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)](https://github.com/yourusername/foremhash)
 
-*Comprehensive audio measurements (SNR/LUFS/LNR/STI), with professional **7-page** PDF reports and file-integrity hash.*
+*Comprehensive audio measurements (SNR/LUFS/LNR/STI), with **7-page** PDF reports and file-integrity hash.*
 
 ---
 
