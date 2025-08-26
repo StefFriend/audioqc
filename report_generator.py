@@ -3,6 +3,7 @@ Report Generator Module for AudioQC
 Handles PDF report generation with all analysis results
 """
 
+from version import __version__, __full_name__
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
@@ -45,7 +46,7 @@ class ReportGenerator:
     
     def add_footer(self, fig):
         """Add footer to any figure"""
-        footer_text = f"AudioQC v 0.3 - Analysis Date: {self.analysis_date}"
+        footer_text = f"{__full_name__} - Analysis Date: {self.analysis_date}"
         fig.text(0.5, 0.01, footer_text, fontsize=8, ha='center', va='center',
                 color='gray', style='italic')
     
