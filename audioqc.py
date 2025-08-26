@@ -1,7 +1,9 @@
 """
-AudioQC v0.3 - Professional Audio Quality Control Tool
+AudioQC - Professional Audio Quality Control Tool
 Main entry point and coordinator
 """
+
+from version import __version__, __full_name__
 
 import numpy as np
 import os
@@ -183,7 +185,7 @@ class AudioAnalyzer:
             # Metadata
             d = pdf.infodict()
             d['Title'] = f'Audio Analysis - {self.filename}'
-            d['Author'] = 'AudioQC v0.3'
+            d['Author'] = __full_name__
             d['Subject'] = 'AudioQC Analysis Report'
             d['Keywords'] = 'Audio, Analysis, SNR, LUFS, LNR, STI'
             d['CreationDate'] = datetime.now()
@@ -196,10 +198,72 @@ class AudioAnalyzer:
 
 
 
+def process_input_path(input_path, output_dir, dpi=100):
+    """Process a single file or directory containing audio files"""
+    results = {}
+    
+    if os.path.isfile(input_path):
+        # Single file processing
+        filename = os.path.basename(input_path)
+        name_only = os.path.splitext(filename)[0]
+        output_path = os.path.join(output_dir, f"{name_only}_analysis.pdf")
+        
+        print(f"\nProcessing: {filename}")
+        
+        analyzer = AudioAnalyzer(input_path)
+        analyzer.dpi = dpi
+        
+        file_results = analyzer.save_report(output_path)
+        results[input_path] = {
+            'output_path': output_path,
+            'results': file_results
+        }
+        
+    elif os.path.isdir(input_path):
+        # Directory processing
+        audio_files = []
+        extensions = ['*.wav', '*.mp3', '*.m4a', '*.flac', '*.aac', '*.ogg', '*.wma']
+        
+        for ext in extensions:
+            audio_files.extend(glob.glob(os.path.join(input_path, ext)))
+            audio_files.extend(glob.glob(os.path.join(input_path, ext.upper())))
+        
+        if not audio_files:
+            print(f"\n✗ No audio files found in directory: {input_path}")
+            return results
+        
+        print(f"\nFound {len(audio_files)} audio files in directory")
+        
+        for i, file_path in enumerate(audio_files):
+            try:
+                filename = os.path.basename(file_path)
+                name_only = os.path.splitext(filename)[0]
+                output_path = os.path.join(output_dir, f"{name_only}_analysis.pdf")
+                
+                print(f"\n[{i+1}/{len(audio_files)}] Processing: {filename}")
+                
+                analyzer = AudioAnalyzer(file_path)
+                analyzer.dpi = dpi
+                
+                file_results = analyzer.save_report(output_path)
+                results[file_path] = {
+                    'output_path': output_path,
+                    'results': file_results
+                }
+                
+            except Exception as e:
+                print(f"✗ Error processing {filename}: {e}")
+    
+    else:
+        print(f"\n✗ Input path does not exist: {input_path}")
+    
+    return results
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description='AudioQC v0.3',
+        description=__full_name__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 This tool provides objective audio measurements.
@@ -214,28 +278,43 @@ Measurements include:
 
 Examples:
   %(prog)s audio.wav
+  %(prog)s /path/to/audio/folder/
   %(prog)s recording.mp3 -o reports/
   %(prog)s podcast.m4a --dpi 150
+  %(prog)s --gui
 
 For full format support:
   pip install pydub
         """
     )
     
-    parser.add_argument('input', nargs='?', help='Audio file to analyze')
+    parser.add_argument('input', nargs='?', help='Audio file or folder to analyze')
     parser.add_argument('-o', '--output', default='audioqc_reports',
                        help='Output directory (default: audioqc_reports)')
     parser.add_argument('--dpi', type=int, default=100,
                        help='PDF resolution in DPI (default: 100)')
+    parser.add_argument('--gui', action='store_true',
+                       help='Launch GUI interface')
     
     args = parser.parse_args()
+    
+    # Launch GUI if requested
+    if args.gui:
+        try:
+            from gui import main as gui_main
+            gui_main()
+            return 0
+        except ImportError as e:
+            print(f"✗ Error launching GUI: {e}")
+            print("Make sure PyQt5 is installed: pip install PyQt5")
+            return 1
     
     if not args.input:
         parser.print_help()
         return 1
     
     print("="*60)
-    print("AudioQC v0.3")
+    print(__full_name__)
     print("="*60)
     
     if not PYDUB_AVAILABLE:
@@ -245,18 +324,14 @@ For full format support:
     os.makedirs(args.output, exist_ok=True)
     
     try:
-        filename = os.path.basename(args.input)
-        name_only = os.path.splitext(filename)[0]
-        output_path = os.path.join(args.output, f"{name_only}_analysis.pdf")
+        results = process_input_path(args.input, args.output, args.dpi)
         
-        print(f"\nProcessing: {filename}")
-        
-        analyzer = AudioAnalyzer(args.input)
-        analyzer.dpi = args.dpi
-        
-        results = analyzer.save_report(output_path)
-        
-        print(f"\n✓ Analysis complete")
+        if results:
+            print(f"\n✓ Analysis complete - processed {len(results)} files")
+            print(f"✓ Reports saved to: {args.output}")
+        else:
+            print(f"\n✗ No files processed")
+            return 1
         
     except Exception as e:
         print(f"\n✗ Error: {e}")

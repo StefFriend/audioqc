@@ -1,11 +1,10 @@
 """
 AudioQC - Professional Audio Quality Control Tool
-Version 0.3
 
 Modular audio analysis toolkit with SNR, LUFS, LNR, and STI measurements.
 """
 
-__version__ = "0.3"
+from .version import __version__, __full_name__
 __author__ = "AudioQC"
 
 # Import main components for package use
