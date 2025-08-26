@@ -45,6 +45,11 @@
 * **Practical ergonomics**
 
   * Auto mono conversion for multi-channel, metadata display, adjustable DPI, clean layout
+* **GUI Interface (Optional)**
+
+  * **PyQt5-based** graphical interface for easy file/folder selection
+  * **Batch processing** with progress tracking and real-time logging
+  * **Cross-platform** support (Windows, macOS, Linux)
 
 ---
 
@@ -53,15 +58,19 @@
 ### Requirements
 
 * Python **3.8+**
-* Packages: `numpy`, `scipy`, `matplotlib`
-  (optional for extended formats: `pydub`, **FFmpeg**; recommended: `soundfile`)
+* **Core packages**: `numpy`, `scipy`, `matplotlib`
+* **GUI support** (optional): `PyQt5`
+* **Extended formats** (optional): `pydub`, **FFmpeg**; recommended: `soundfile`
 
 ```bash
-# minimal (WAV only)
+# minimal (WAV only, CLI mode)
 pip install numpy scipy matplotlib
 
-# full (all common formats)
-pip install numpy scipy matplotlib pydub soundfile
+# with GUI support
+pip install numpy scipy matplotlib PyQt5
+
+# full (all formats + GUI)
+pip install numpy scipy matplotlib PyQt5 pydub soundfile
 ```
 
 **FFmpeg** (required by `pydub` for MP3/M4A/…):
@@ -85,10 +94,34 @@ pip install numpy scipy matplotlib pydub soundfile
 
 ## ▶️ Usage
 
-Basic:
+### GUI Mode (Recommended)
+
+Launch the graphical interface:
+
+```bash
+python audioqc.py --gui
+```
+
+The GUI provides:
+* **File Selection**: Browse for single audio files
+* **Folder Selection**: Process entire directories of audio files
+* **Output Directory**: Choose where reports are saved (default: `audioqc_reports`)
+* **DPI Setting**: Adjust PDF quality/resolution
+* **Progress Tracking**: Real-time analysis progress and logging
+* **Batch Processing**: Automatically processes all audio files in a folder
+
+### Command Line Mode
+
+Single file:
 
 ```bash
 python audioqc.py <input-audio-file>
+```
+
+Process entire folder:
+
+```bash
+python audioqc.py /path/to/audio/folder/
 ```
 
 Specify output folder & DPI:
@@ -101,15 +134,17 @@ Command-line options:
 
 | Flag           |           Default | Description                                          |
 | -------------- | ----------------: | ---------------------------------------------------- |
-| `input`        |                 — | Path to the audio file to analyze                    |
-| `-o, --output` | `audioqc_reports` | Output directory for the PDF report                  |
+| `input`        |                 — | Path to audio file or folder to analyze             |
+| `-o, --output` | `audioqc_reports` | Output directory for the PDF report(s)              |
 | `--dpi`        |             `100` | DPI for PDF figures (higher = sharper & larger file) |
+| `--gui`        |                 — | Launch graphical user interface                      |
 
-Output:
+### Output
 
-* A PDF report at: `audioqc_reports/<filename>_analysis.pdf`
-  (Path, file size, and basic info are printed in the console. The PDF embeds metadata:
-  Title/Author/Subject/Keywords.)
+* **Single file**: `audioqc_reports/<filename>_analysis.pdf`
+* **Folder**: Individual PDFs for each audio file found
+* Console shows file paths, sizes, and processing status
+* PDFs include embedded metadata (Title/Author/Subject/Keywords)
 
 ---
 
@@ -118,7 +153,9 @@ Output:
 ```
 audioqc/
 │
-├── audioqc.py              # Main entry point
+├── audioqc.py              # Main entry point (CLI + GUI launcher)
+├── gui.py                  # PyQt5 graphical user interface
+├── version.py              # Centralized version management
 ├── audio_loader.py         # Universal audio loading (WAV + optional FFmpeg)
 ├── snr_analyzer.py         # SNR analysis (global & speech-weighted)
 ├── lufs_analyzer.py        # LUFS + LNR (BS.1770-4)
@@ -298,16 +335,25 @@ audioqc/
 
 ## 🩺 Troubleshooting
 
-* “**pydub not installed**” / “**Limited to WAV**” → `pip install pydub` and install FFmpeg.
-* “**Could not load audio file**” → Check path & permissions; ensure FFmpeg decodes exotic codecs.
+### GUI Issues
+* "**Error launching GUI**" → Install PyQt5: `pip install PyQt5`
+* **GUI doesn't open** → Check Python version (3.8+) and PyQt5 installation
+
+### Audio Processing
+* "**pydub not installed**" / "**Limited to WAV**" → `pip install pydub` and install FFmpeg.
+* "**Could not load audio file**" → Check path & permissions; ensure FFmpeg decodes exotic codecs.
 * **Very high/low SNR/LNR/STI** → Content may be very quiet/dynamic; tweak silence parameters.
 * **Clipped True Peak** → Use a limiter; target ≤ **−1 dBTP**.
+
+### General
 * **PDF issues** → Ensure `matplotlib` is up to date: `pip install --upgrade matplotlib`
+* **No files found in folder** → Check folder contains supported audio formats (WAV, MP3, etc.)
 
 ---
 
 ## 🕰 Version History
 
+* **v0.4**: Added **PyQt5 GUI interface**, **folder processing**, and **centralized version management**
 * **v0.3**: Added **dedicated STI page** and expanded to **7-page** PDF; modular architecture
 * **v0.2**: Added **LNR** metric, improved SNR calculation
 * **v0.1**: Initial release with basic SNR and LUFS
