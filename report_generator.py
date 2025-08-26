@@ -5,6 +5,8 @@ Handles PDF report generation with all analysis results
 
 from version import __version__, __full_name__
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend to prevent GUI threading issues
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.backends.backend_pdf import PdfPages
@@ -823,7 +825,7 @@ Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
             
             ax.set_xlabel('STI', fontsize=9)
             ax.set_ylabel('Count', fontsize=9)
-            ax.set_title('STI Distribution', fontsize=10, fontweight='bold')
+            ax.set_title('STI Distribution', fontsize=10, fontweight='bold', pad=2)
             ax.grid(True, alpha=0.3, axis='y', linestyle='--')
             ax.set_xlim(0, 1)
     
