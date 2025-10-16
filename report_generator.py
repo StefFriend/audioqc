@@ -46,44 +46,49 @@ class ReportGenerator:
             'neutral': '#95a5a6'       # Gray
         }
     
-    def add_footer(self, fig):
-        """Add footer to any figure"""
+    def add_footer(self, fig, page_num=None):
+        """Add footer to any figure with optional page number"""
         footer_text = f"{__full_name__} - Analysis Date: {self.analysis_date}"
         fig.text(0.5, 0.01, footer_text, fontsize=8, ha='center', va='center',
                 color='gray', style='italic')
+
+        # Add page number in bottom right
+        if page_num is not None:
+            fig.text(0.95, 0.01, f"Page {page_num}", fontsize=8, ha='right', va='center',
+                    color='gray', style='italic')
     
     def create_all_pages(self):
         """Create all report pages"""
         figures = []
         
         # Page 1: Executive Summary with Hash
-        fig1 = self.create_executive_summary_page()
+        fig1 = self.create_executive_summary_page(page_num=1)
         figures.append(fig1)
-        
+
         # Page 2: SNR and LNR Analysis
-        fig2 = self.create_snr_lnr_page()
+        fig2 = self.create_snr_lnr_page(page_num=2)
         figures.append(fig2)
-        
+
         # Page 3: LUFS Analysis
-        fig3 = self.create_lufs_analysis_page()
+        fig3 = self.create_lufs_analysis_page(page_num=3)
         figures.append(fig3)
-        
+
         # Page 4: Spectral Analysis
-        fig4 = self.create_spectral_analysis_page()
+        fig4 = self.create_spectral_analysis_page(page_num=4)
         figures.append(fig4)
-        
+
         # Page 5: STI Analysis
-        fig5 = self.create_sti_analysis_page()
+        fig5 = self.create_sti_analysis_page(page_num=5)
         figures.append(fig5)
-        
+
         # Page 6: Measurement Explanation
-        fig6 = self.create_measurement_explanation_page()
+        fig6 = self.create_measurement_explanation_page(page_num=6)
         figures.append(fig6)
-        
+
         # Page 7: Standards Reference
-        fig7 = self.create_standards_reference_page()
+        fig7 = self.create_standards_reference_page(page_num=7)
         figures.append(fig7)
-        
+
         return figures
     
     def save_pdf(self, out_path="AudioQC_Report.pdf"):
@@ -118,7 +123,7 @@ class ReportGenerator:
 
 
     
-    def create_executive_summary_page(self):
+    def create_executive_summary_page(self, page_num=None):
         """Create executive summary page with file hash and measurements"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
         
@@ -199,151 +204,151 @@ class ReportGenerator:
         # Waveform preview - now takes the remaining space
         ax_wave = fig.add_subplot(gs[3:])
         self.plot_waveform_simple(ax_wave)
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_snr_lnr_page(self):
+    def create_snr_lnr_page(self, page_num=None):
         """Create SNR and LNR analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'SNR AND LNR ANALYSIS', 
+
+        fig.text(0.5, 0.97, 'SNR AND LNR ANALYSIS',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         gs = GridSpec(5, 2, figure=fig, hspace=0.45, wspace=0.35,
                      top=0.89, bottom=0.07, left=0.1, right=0.9)
-                
+
         # RMS Energy with noise floor
         ax_rms = fig.add_subplot(gs[0, :])
         self.plot_rms_energy(ax_rms)
-        
+
         # Temporal SNR
         ax_snr = fig.add_subplot(gs[1, :])
         self.plot_temporal_snr(ax_snr)
-        
+
         # Temporal LNR
         ax_lnr = fig.add_subplot(gs[2, :])
         self.plot_temporal_lnr(ax_lnr)
-        
+
         # SNR vs LNR Comparison
         ax_compare = fig.add_subplot(gs[3, :])
         self.plot_snr_lnr_comparison(ax_compare)
-        
+
         # Frequency bands SNR
         ax_bands = fig.add_subplot(gs[4, :])
         self.plot_frequency_bands(ax_bands)
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_lufs_analysis_page(self):
+    def create_lufs_analysis_page(self, page_num=None):
         """Create LUFS analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'LOUDNESS ANALYSIS (LUFS)', 
+
+        fig.text(0.5, 0.97, 'LOUDNESS ANALYSIS (LUFS)',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         gs = GridSpec(4, 2, figure=fig, hspace=0.35, wspace=0.35,
                      top=0.93, bottom=0.05, left=0.08, right=0.95)
-        
+
         # LUFS Timeline
         ax_lufs = fig.add_subplot(gs[0:2, :])
         self.plot_lufs_timeline(ax_lufs)
-        
+
         # LUFS distribution
         ax_dist = fig.add_subplot(gs[2, 0])
         self.plot_lufs_distribution(ax_dist)
-        
+
         # Amplitude distribution
         ax_amp = fig.add_subplot(gs[2, 1])
         self.plot_amplitude_histogram(ax_amp)
-        
+
         # LUFS Statistics
         ax_stats = fig.add_subplot(gs[3, :])
         self.create_lufs_statistics_table(ax_stats)
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_spectral_analysis_page(self):
+    def create_spectral_analysis_page(self, page_num=None):
         """Create spectral analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'SPECTRAL ANALYSIS', 
+
+        fig.text(0.5, 0.97, 'SPECTRAL ANALYSIS',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         gs = GridSpec(3, 1, figure=fig, hspace=0.35,
                      top=0.93, bottom=0.05, left=0.08, right=0.95)
-        
+
         # Spectrogram
         ax_spec = fig.add_subplot(gs[0:2])
         self.plot_spectrogram(ax_spec)
-        
+
         # Spectral statistics
         ax_stats = fig.add_subplot(gs[2])
         self.plot_spectral_statistics(ax_stats)
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_sti_analysis_page(self):
+    def create_sti_analysis_page(self, page_num=None):
         """Create STI analysis page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'STI (SPEECH TRANSMISSION INDEX) ANALYSIS', 
+
+        fig.text(0.5, 0.97, 'STI (SPEECH TRANSMISSION INDEX) ANALYSIS',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         gs = GridSpec(5, 2, figure=fig, hspace=0.4, wspace=0.35,
                      top=0.93, bottom=0.05, left=0.08, right=0.95)
-        
+
         # STI over time
         ax_sti = fig.add_subplot(gs[0:2, :])
         self.plot_sti_timeline(ax_sti)
-        
+
         # STI per frequency band
         ax_bands = fig.add_subplot(gs[2, :])
         self.plot_sti_bands(ax_bands)
-        
+
         # STI distribution histogram
         ax_dist = fig.add_subplot(gs[3, 0])
         self.plot_sti_distribution(ax_dist)
-        
+
         # STI statistics table
         ax_stats = fig.add_subplot(gs[3, 1])
         self.create_sti_statistics_table(ax_stats)
-        
+
         # STI interpretation guide
         ax_guide = fig.add_subplot(gs[4, :])
         self.create_sti_interpretation_guide(ax_guide)
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_measurement_explanation_page(self):
+    def create_measurement_explanation_page(self, page_num=None):
         """Create page explaining SNR, LUFS, LNR, and STI"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'MEASUREMENT EXPLANATIONS', 
+
+        fig.text(0.5, 0.97, 'MEASUREMENT EXPLANATIONS',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         ax = fig.add_subplot(111)
         ax.axis('off')
-        
+
         explanation_text = """
 SNR (Signal-to-Noise Ratio)
 ────────────────────────────────────────────────────────────────────────────────
-The SNR measures the level difference between the desired signal and background 
-noise in decibels (dB). It represents how much the signal stands out from the 
+The SNR measures the level difference between the desired signal and background
+noise in decibels (dB). It represents how much the signal stands out from the
 noise floor.
 
 • Global SNR: Overall signal-to-noise ratio across the entire file
@@ -353,8 +358,8 @@ noise floor.
 
 LUFS (Loudness Units relative to Full Scale)
 ────────────────────────────────────────────────────────────────────────────────
-LUFS is a standardized measurement of audio loudness that accounts for human 
-perception, as defined in ITU-R BS.1770-4. Unlike peak or RMS measurements, 
+LUFS is a standardized measurement of audio loudness that accounts for human
+perception, as defined in ITU-R BS.1770-4. Unlike peak or RMS measurements,
 LUFS uses K-weighting filters to match human hearing sensitivity.
 
 • Integrated LUFS: Average loudness over the entire file with gating
@@ -365,8 +370,8 @@ LUFS uses K-weighting filters to match human hearing sensitivity.
 
 LNR (LUFS to Noise Ratio) - Custom derived metric
 ────────────────────────────────────────────────────────────────────────────────
-LNR is the loudness-domain equivalent of SNR, measuring the difference between 
-the integrated LUFS and the noise floor expressed in LUFS. This provides a 
+LNR is the loudness-domain equivalent of SNR, measuring the difference between
+the integrated LUFS and the noise floor expressed in LUFS. This provides a
 perceptually-weighted assessment of signal clarity.
 
 • LNR = Integrated LUFS - Noise Floor LUFS
@@ -394,25 +399,25 @@ SNR vs LNR vs STI:
 • STI: Modulation domain, speech-specific intelligibility
 • All assess clarity but from different perspectives
         """
-        
+
         ax.text(0.05, 0.94, explanation_text, fontsize=8.5, family='monospace',
                transform=ax.transAxes, va='top')
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
-    def create_standards_reference_page(self):
+    def create_standards_reference_page(self, page_num=None):
         """Create standards reference page"""
         fig = plt.figure(figsize=(8.27, 11.69), facecolor='white')
-        
-        fig.text(0.5, 0.97, 'TECHNICAL STANDARDS REFERENCE', 
+
+        fig.text(0.5, 0.97, 'TECHNICAL STANDARDS REFERENCE',
                 fontsize=16, fontweight='bold', ha='center', color=self.color_scheme['primary'])
-        
+
         ax = fig.add_subplot(111)
         ax.axis('off')
-        
+
         standards_text = """
 LOUDNESS STANDARDS
 ────────────────────────────────────────────────────────────────────────────────
@@ -479,36 +484,55 @@ All measurements in this report comply with:
 Calibration: 0 dBFS = Full Scale Digital
 Reference: 1 kHz sine wave at -20 dBFS
         """
-        
+
         ax.text(0.05, 0.94, standards_text, fontsize=8, family='monospace',
                transform=ax.transAxes, va='top')
-        
+
         # Add footer
-        self.add_footer(fig)
-        
+        self.add_footer(fig, page_num)
+
         return fig
     
     # Plotting helper functions
     def plot_waveform_simple(self, ax):
-        """Plot simple waveform"""
-        display_samples = min(len(self.audio), 20000)
-        if len(self.audio) > display_samples:
-            indices = np.linspace(0, len(self.audio) - 1, display_samples, dtype=int)
-            audio_display = self.audio[indices]
-            time_display = indices / self.sr
+        """Plot simple waveform with peak-preserving downsampling"""
+        max_display_samples = 5000  # Increased for better detail
+
+        if len(self.audio) > max_display_samples:
+            # Peak-preserving downsampling: keep min and max of each chunk
+            chunk_size = len(self.audio) // (max_display_samples // 2)
+            n_chunks = len(self.audio) // chunk_size
+
+            audio_display = np.zeros(n_chunks * 2)
+            time_display = np.zeros(n_chunks * 2)
+
+            for i in range(n_chunks):
+                start_idx = i * chunk_size
+                end_idx = min((i + 1) * chunk_size, len(self.audio))
+                chunk = self.audio[start_idx:end_idx]
+
+                # Store min and max of chunk to preserve peaks
+                audio_display[i*2] = np.min(chunk)
+                audio_display[i*2 + 1] = np.max(chunk)
+
+                time_idx = (start_idx + end_idx) / 2
+                time_display[i*2] = time_idx / self.sr
+                time_display[i*2 + 1] = time_idx / self.sr
         else:
             audio_display = self.audio
             time_display = np.arange(len(self.audio)) / self.sr
-        
-        ax.fill_between(time_display, audio_display, alpha=0.5, color=self.color_scheme['secondary'])
-        ax.plot(time_display, audio_display, linewidth=0.5, color=self.color_scheme['primary'])
-        
+
+        ax.fill_between(time_display, audio_display, alpha=0.5,
+                       color=self.color_scheme['secondary'], linewidth=0)
+        ax.plot(time_display, audio_display, linewidth=0.5,
+               color=self.color_scheme['primary'], rasterized=True)
+
         # Mark silence regions
         for start, end in self.results['snr']['silence_regions']:
             start_time = start * self.hop_length / self.sr
             end_time = end * self.hop_length / self.sr
             ax.axvspan(start_time, end_time, alpha=0.2, color=self.color_scheme['danger'])
-        
+
         ax.set_xlabel('Time (s)', fontsize=9)
         ax.set_ylabel('Amplitude', fontsize=9)
         ax.set_title('Waveform Overview', fontsize=10, fontweight='bold')
@@ -517,20 +541,33 @@ Reference: 1 kHz sine wave at -20 dBFS
         ax.set_ylim(-1.05, 1.05)
     
     def plot_rms_energy(self, ax):
-        """Plot RMS energy"""
-        rms_time = np.arange(len(self.results['snr']['rms'])) * self.hop_length / self.sr
-        rms_db = 20 * np.log10(self.results['snr']['rms'] + 1e-10)
-        
-        ax.fill_between(rms_time, -60, rms_db, alpha=0.3, color=self.color_scheme['secondary'])
-        ax.plot(rms_time, rms_db, linewidth=1, color=self.color_scheme['primary'])
-        
+        """Plot RMS energy with downsampling for PDF efficiency"""
+        rms = self.results['snr']['rms']
+        rms_time = np.arange(len(rms)) * self.hop_length / self.sr
+        rms_db = 20 * np.log10(rms + 1e-10)
+
+        # Downsample if too many points (>1000) to reduce PDF size
+        max_points = 1000
+        if len(rms_db) > max_points:
+            step = len(rms_db) // max_points
+            rms_db_display = rms_db[::step]
+            rms_time_display = rms_time[::step]
+        else:
+            rms_db_display = rms_db
+            rms_time_display = rms_time
+
+        ax.fill_between(rms_time_display, -60, rms_db_display, alpha=0.3,
+                       color=self.color_scheme['secondary'], linewidth=0)
+        ax.plot(rms_time_display, rms_db_display, linewidth=0.8,
+               color=self.color_scheme['primary'], rasterized=True)
+
         ax.axhline(y=self.results['snr']['noise_floor'], color=self.color_scheme['danger'],
                   linestyle='--', linewidth=1.5, alpha=0.8,
                   label=f'Noise Floor: {self.results["snr"]["noise_floor"]:.1f} dB')
         ax.axhline(y=self.results['snr']['signal_level'], color=self.color_scheme['success'],
                   linestyle='--', linewidth=1.5, alpha=0.8,
                   label=f'Signal Level: {self.results["snr"]["signal_level"]:.1f} dB')
-        
+
         ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
         ax.set_ylabel('Level (dBFS)', fontsize=9)
         ax.set_title('RMS Energy Analysis', fontsize=10, fontweight='bold')
@@ -540,17 +577,25 @@ Reference: 1 kHz sine wave at -20 dBFS
         ax.set_ylim(max(-60, self.results['snr']['noise_floor'] - 10), 0)
     
     def plot_temporal_snr(self, ax):
-        """Plot temporal SNR"""
+        """Plot temporal SNR with optimization"""
         if self.results['snr']['temporal_snr']:
             times = [(s['start'] + s['end'])/2 for s in self.results['snr']['temporal_snr']]
             values = [s['snr'] for s in self.results['snr']['temporal_snr']]
-            
-            ax.plot(times, values, marker='o', linewidth=2, markersize=5,
-                   color=self.color_scheme['primary'], label='Temporal SNR')
+
+            # Downsample if too many points
+            max_points = 500
+            if len(times) > max_points:
+                step = len(times) // max_points
+                times = times[::step]
+                values = values[::step]
+
+            ax.plot(times, values, marker='o', linewidth=2, markersize=4,
+                   color=self.color_scheme['primary'], label='Temporal SNR',
+                   rasterized=True)
             ax.axhline(y=self.results['snr']['global_snr'], color=self.color_scheme['accent'],
                       linestyle='--', linewidth=1.5, alpha=0.8,
                       label=f'Average: {self.results["snr"]["global_snr"]:.1f} dB')
-            
+
             ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
             ax.set_ylabel('SNR (dB)', fontsize=9)
             ax.set_title('Temporal SNR Variation', fontsize=10, fontweight='bold')
@@ -559,17 +604,25 @@ Reference: 1 kHz sine wave at -20 dBFS
             ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
     
     def plot_temporal_lnr(self, ax):
-        """Plot temporal LNR"""
+        """Plot temporal LNR with optimization"""
         if self.results['lufs']['temporal_lnr']:
             times = [(s['start'] + s['end'])/2 for s in self.results['lufs']['temporal_lnr']]
             values = [s['lnr'] for s in self.results['lufs']['temporal_lnr']]
-            
-            ax.plot(times, values, marker='s', linewidth=2, markersize=5,
-                   color=self.color_scheme['accent'], label='Temporal LNR')
+
+            # Downsample if too many points
+            max_points = 500
+            if len(times) > max_points:
+                step = len(times) // max_points
+                times = times[::step]
+                values = values[::step]
+
+            ax.plot(times, values, marker='s', linewidth=2, markersize=4,
+                   color=self.color_scheme['accent'], label='Temporal LNR',
+                   rasterized=True)
             ax.axhline(y=self.results['lufs']['lnr'], color=self.color_scheme['primary'],
                       linestyle='--', linewidth=1.5, alpha=0.8,
                       label=f'Average: {self.results["lufs"]["lnr"]:.1f} LU')
-            
+
             ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
             ax.set_ylabel('LNR (LU)', fontsize=9)
             ax.set_title('Temporal LNR (LUFS to Noise Ratio) Variation', fontsize=10, fontweight='bold')
@@ -630,58 +683,85 @@ Reference: 1 kHz sine wave at -20 dBFS
         ax.grid(True, alpha=0.3, axis='y', linestyle='--')
     
     def plot_lufs_timeline(self, ax):
-        """Plot LUFS timeline"""
-        if len(self.results['lufs']['momentary']) > 500:
-            step = len(self.results['lufs']['momentary']) // 500
+        """Plot LUFS timeline with optimization"""
+        # Downsample momentary to max 800 points
+        max_mom_points = 800
+        if len(self.results['lufs']['momentary']) > max_mom_points:
+            step = len(self.results['lufs']['momentary']) // max_mom_points
             mom_display = self.results['lufs']['momentary'][::step]
             mom_times = self.results['lufs']['momentary_times'][::step]
         else:
             mom_display = self.results['lufs']['momentary']
             mom_times = self.results['lufs']['momentary_times']
-        
+
+        # Downsample short-term to max 500 points
+        short_term = self.results['lufs']['short_term']
+        short_term_times = self.results['lufs']['short_term_times']
+        max_short_points = 500
+        if len(short_term) > max_short_points:
+            step = len(short_term) // max_short_points
+            short_term = short_term[::step]
+            short_term_times = short_term_times[::step]
+
         ax.plot(mom_times, mom_display, linewidth=0.5, alpha=0.5,
-               label='Momentary', color=self.color_scheme['neutral'])
-        ax.plot(self.results['lufs']['short_term_times'], self.results['lufs']['short_term'],
-               linewidth=1.5, label='Short-term', color=self.color_scheme['secondary'])
+               label='Momentary', color=self.color_scheme['neutral'], rasterized=True)
+        ax.plot(short_term_times, short_term,
+               linewidth=1.5, label='Short-term', color=self.color_scheme['secondary'],
+               rasterized=True)
         ax.axhline(y=self.results['lufs']['integrated'], color=self.color_scheme['accent'],
                   linestyle='--', linewidth=2,
                   label=f'Integrated: {self.results["lufs"]["integrated"]:.1f} LUFS')
         ax.axhline(y=self.results['lufs']['noise_floor_lufs'], color=self.color_scheme['danger'],
                   linestyle=':', linewidth=1.5, alpha=0.7,
                   label=f'Noise Floor: {self.results["lufs"]["noise_floor_lufs"]:.1f} LUFS')
-        
+
         ax.set_xlabel('Time (s)', fontsize=9)
         ax.set_ylabel('LUFS', fontsize=9)
         ax.set_title('Loudness Timeline (ITU-R BS.1770-4)', fontsize=10, fontweight='bold')
         ax.legend(loc='lower left', fontsize=7, ncol=2)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
-        ax.set_ylim(max(-70, min(self.results['lufs']['noise_floor_lufs'] - 5, 
+        ax.set_ylim(max(-70, min(self.results['lufs']['noise_floor_lufs'] - 5,
                                  self.results['lufs']['integrated'] - 20)), 0)
     
     def plot_lufs_distribution(self, ax):
-        """Plot LUFS distribution"""
-        ax.hist(self.results['lufs']['momentary'], bins=50, alpha=0.7,
-               color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5)
+        """Plot LUFS distribution with optimization"""
+        # Downsample data for histogram if too large
+        momentary = self.results['lufs']['momentary']
+        max_hist_samples = 5000
+        if len(momentary) > max_hist_samples:
+            step = len(momentary) // max_hist_samples
+            momentary = momentary[::step]
+
+        ax.hist(momentary, bins=50, alpha=0.7,
+               color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5,
+               rasterized=True)
         ax.axvline(x=self.results['lufs']['integrated'], color='red', linestyle='--',
                   linewidth=2, alpha=0.8)
         ax.axvline(x=self.results['lufs']['noise_floor_lufs'], color=self.color_scheme['danger'],
                   linestyle=':', linewidth=1.5, alpha=0.8)
-        
+
         ax.set_xlabel('LUFS', fontsize=9)
         ax.set_ylabel('Count', fontsize=9)
         ax.set_title('Loudness Distribution', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='y', linestyle='--')
     
     def plot_amplitude_histogram(self, ax):
-        """Plot amplitude distribution"""
-        ax.hist(self.audio, bins=100, alpha=0.7, color=self.color_scheme['secondary'],
-               edgecolor='black', linewidth=0.5)
+        """Plot amplitude distribution with optimization"""
+        # Downsample audio for histogram if too large
+        audio_data = self.audio
+        max_hist_samples = 10000
+        if len(audio_data) > max_hist_samples:
+            step = len(audio_data) // max_hist_samples
+            audio_data = audio_data[::step]
+
+        ax.hist(audio_data, bins=100, alpha=0.7, color=self.color_scheme['secondary'],
+               edgecolor='black', linewidth=0.5, rasterized=True)
         ax.set_xlabel('Amplitude', fontsize=9)
         ax.set_ylabel('Count', fontsize=9)
         ax.set_title('Amplitude Distribution', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='y', linestyle='--')
-        
+
         mean = np.mean(self.audio)
         std = np.std(self.audio)
         stats_text = f'μ={mean:.3f}\nσ={std:.3f}'
@@ -711,30 +791,41 @@ True Peak Linear:        {self.results['lufs']['true_peak']:.4f}
                transform=ax.transAxes, va='center')
     
     def plot_spectrogram(self, ax):
-        """Plot spectrogram"""
+        """Plot spectrogram with optimization"""
         f = self.results['spectral']['f']
         t = self.results['spectral']['t']
         Sxx = self.results['spectral']['Sxx']
-        
+
         max_freq_idx = np.where(f <= min(10000, self.sr/2))[0][-1]
-        
-        if Sxx.shape[1] > 500:
-            step = Sxx.shape[1] // 500
+
+        # Downsample time axis to max 400 points
+        max_time_points = 400
+        if Sxx.shape[1] > max_time_points:
+            step = Sxx.shape[1] // max_time_points
             Sxx_display = Sxx[:max_freq_idx, ::step]
             t_display = t[::step]
         else:
             Sxx_display = Sxx[:max_freq_idx, :]
             t_display = t
-        
-        im = ax.pcolormesh(t_display, f[:max_freq_idx],
+
+        # Downsample frequency axis to max 300 bins
+        max_freq_bins = 300
+        if Sxx_display.shape[0] > max_freq_bins:
+            freq_step = Sxx_display.shape[0] // max_freq_bins
+            Sxx_display = Sxx_display[::freq_step, :]
+            f_display = f[:max_freq_idx][::freq_step]
+        else:
+            f_display = f[:max_freq_idx]
+
+        im = ax.pcolormesh(t_display, f_display,
                           10 * np.log10(Sxx_display + 1e-10),
                           shading='auto', cmap='viridis', rasterized=True)
-        
+
         ax.set_ylabel('Frequency (Hz)', fontsize=9)
         ax.set_xlabel('Time (s)', fontsize=9)
         ax.set_title('Spectrogram', fontsize=10, fontweight='bold')
         ax.set_ylim(0, min(10000, self.sr/2))
-        
+
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label('Power (dB)', fontsize=8)
         cbar.ax.tick_params(labelsize=8)
@@ -760,28 +851,35 @@ Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
                transform=ax.transAxes, va='center')
     
     def plot_sti_timeline(self, ax):
-        """Plot STI over time"""
+        """Plot STI over time with optimization"""
         if 'temporal_sti' in self.results['sti'] and self.results['sti']['temporal_sti']:
             times = [s['time'] for s in self.results['sti']['temporal_sti']]
             values = [s['sti'] for s in self.results['sti']['temporal_sti']]
-            
+
+            # Downsample if too many points
+            max_points = 500
+            if len(times) > max_points:
+                step = len(times) // max_points
+                times = times[::step]
+                values = values[::step]
+
             # Step plot for STI values
-            ax.step(times, values, where='post', linewidth=2, 
-                   color=self.color_scheme['primary'], label='STI')
-            
+            ax.step(times, values, where='post', linewidth=2,
+                   color=self.color_scheme['primary'], label='STI', rasterized=True)
+
             # Average line
-            ax.axhline(y=self.results['sti']['overall_sti'], 
+            ax.axhline(y=self.results['sti']['overall_sti'],
                       color=self.color_scheme['accent'],
                       linestyle='--', linewidth=2, alpha=0.8,
                       label=f'Mean: {self.results["sti"]["overall_sti"]:.3f}')
-            
+
             # Quality zones
             ax.axhspan(0.75, 1.0, alpha=0.1, color='green', label='Excellent')
             ax.axhspan(0.60, 0.75, alpha=0.1, color='yellow')
             ax.axhspan(0.45, 0.60, alpha=0.1, color='orange')
             ax.axhspan(0.30, 0.45, alpha=0.1, color='red')
             ax.axhspan(0.0, 0.30, alpha=0.1, color='darkred')
-            
+
             ax.set_xlabel('Time (s)', fontsize=9)
             ax.set_ylabel('STI', fontsize=9)
             ax.set_title('Speech Transmission Index Over Time', fontsize=10, fontweight='bold')
@@ -814,15 +912,24 @@ Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
             ax.grid(True, alpha=0.3, axis='y', linestyle='--')
     
     def plot_sti_distribution(self, ax):
-        """Plot STI distribution histogram"""
+        """Plot STI distribution histogram with optimization"""
         if 'sti_values' in self.results['sti']:
-            ax.hist(self.results['sti']['sti_values'], bins=20, alpha=0.7,
-                   color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5)
-            
+            sti_values = self.results['sti']['sti_values']
+
+            # Downsample if too many values
+            max_hist_samples = 5000
+            if len(sti_values) > max_hist_samples:
+                step = len(sti_values) // max_hist_samples
+                sti_values = sti_values[::step]
+
+            ax.hist(sti_values, bins=20, alpha=0.7,
+                   color=self.color_scheme['accent'], edgecolor='black', linewidth=0.5,
+                   rasterized=True)
+
             # Add mean line
-            ax.axvline(x=self.results['sti']['overall_sti'], color='red', 
+            ax.axvline(x=self.results['sti']['overall_sti'], color='red',
                       linestyle='--', linewidth=2, alpha=0.8)
-            
+
             ax.set_xlabel('STI', fontsize=9)
             ax.set_ylabel('Count', fontsize=9)
             ax.set_title('STI Distribution', fontsize=10, fontweight='bold', pad=2)
