@@ -16,7 +16,17 @@ from datetime import datetime
 
 class ReportGenerator:
     """Professional PDF report generator"""
-    
+
+    @staticmethod
+    def format_time(seconds):
+        """Convert seconds to HH:MM:SS.mmm format"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        milliseconds = int((secs % 1) * 1000)
+        secs = int(secs)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+
     def __init__(self, data):
         """Initialize with analysis data"""
         self.filename = data['filename']
@@ -152,7 +162,7 @@ class ReportGenerator:
         info_text = f"""File: {self.filename}
     SHA256: {self.file_hash}
     Format: {self.metadata.get('format', 'Unknown')} | Channels: {self.metadata.get('channels', 1)}
-    Sample Rate: {self.sr} Hz | Duration: {self.duration:.2f}s
+    Sample Rate: {self.sr} Hz | Duration: {self.format_time(self.duration)}
     Size: {self.file_size:.2f} MB | Bit Depth: {self.metadata.get('bit_depth', 'Unknown')}"""
         
         ax_info.text(0.5, 0.5, info_text, fontsize=8.5, ha='center', va='center',
@@ -533,12 +543,17 @@ Reference: 1 kHz sine wave at -20 dBFS
             end_time = end * self.hop_length / self.sr
             ax.axvspan(start_time, end_time, alpha=0.2, color=self.color_scheme['danger'])
 
-        ax.set_xlabel('Time (s)', fontsize=9)
+        ax.set_xlabel('Time', fontsize=9)
         ax.set_ylabel('Amplitude', fontsize=9)
         ax.set_title('Waveform Overview', fontsize=10, fontweight='bold')
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
         ax.set_ylim(-1.05, 1.05)
+
+        # Format x-axis with time format
+        from matplotlib.ticker import FuncFormatter
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+        ax.tick_params(axis='x', labelsize=6)
     
     def plot_rms_energy(self, ax):
         """Plot RMS energy with downsampling for PDF efficiency"""
@@ -568,13 +583,18 @@ Reference: 1 kHz sine wave at -20 dBFS
                   linestyle='--', linewidth=1.5, alpha=0.8,
                   label=f'Signal Level: {self.results["snr"]["signal_level"]:.1f} dB')
 
-        ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
+        ax.set_xlabel('Time', fontsize=9, labelpad=2)
         ax.set_ylabel('Level (dBFS)', fontsize=9)
         ax.set_title('RMS Energy Analysis', fontsize=10, fontweight='bold')
         ax.legend(loc='lower right', fontsize=8)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(0, self.duration)
         ax.set_ylim(max(-60, self.results['snr']['noise_floor'] - 10), 0)
+
+        # Format x-axis with time format
+        from matplotlib.ticker import FuncFormatter
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+        ax.tick_params(axis='x', labelsize=6)
     
     def plot_temporal_snr(self, ax):
         """Plot temporal SNR with optimization"""
@@ -596,12 +616,17 @@ Reference: 1 kHz sine wave at -20 dBFS
                       linestyle='--', linewidth=1.5, alpha=0.8,
                       label=f'Average: {self.results["snr"]["global_snr"]:.1f} dB')
 
-            ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
+            ax.set_xlabel('Time', fontsize=9, labelpad=2)
             ax.set_ylabel('SNR (dB)', fontsize=9)
             ax.set_title('Temporal SNR Variation', fontsize=10, fontweight='bold')
             ax.legend(loc='best', fontsize=8)
             ax.grid(True, alpha=0.3, linestyle='--')
             ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
+
+            # Format x-axis with time format
+            from matplotlib.ticker import FuncFormatter
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+            ax.tick_params(axis='x', labelsize=6)
     
     def plot_temporal_lnr(self, ax):
         """Plot temporal LNR with optimization"""
@@ -623,12 +648,17 @@ Reference: 1 kHz sine wave at -20 dBFS
                       linestyle='--', linewidth=1.5, alpha=0.8,
                       label=f'Average: {self.results["lufs"]["lnr"]:.1f} LU')
 
-            ax.set_xlabel('Time (s)', fontsize=9, labelpad=2)
+            ax.set_xlabel('Time', fontsize=9, labelpad=2)
             ax.set_ylabel('LNR (LU)', fontsize=9)
             ax.set_title('Temporal LNR (LUFS to Noise Ratio) Variation', fontsize=10, fontweight='bold')
             ax.legend(loc='best', fontsize=8)
             ax.grid(True, alpha=0.3, linestyle='--')
             ax.set_xlim(-self.duration * 0.02, self.duration * 1.02)
+
+            # Format x-axis with time format
+            from matplotlib.ticker import FuncFormatter
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+            ax.tick_params(axis='x', labelsize=6)
     
     def plot_snr_lnr_comparison(self, ax):
         """Plot SNR vs LNR comparison"""
@@ -715,7 +745,7 @@ Reference: 1 kHz sine wave at -20 dBFS
                   linestyle=':', linewidth=1.5, alpha=0.7,
                   label=f'Noise Floor: {self.results["lufs"]["noise_floor_lufs"]:.1f} LUFS')
 
-        ax.set_xlabel('Time (s)', fontsize=9)
+        ax.set_xlabel('Time', fontsize=9)
         ax.set_ylabel('LUFS', fontsize=9)
         ax.set_title('Loudness Timeline (ITU-R BS.1770-4)', fontsize=10, fontweight='bold')
         ax.legend(loc='lower left', fontsize=7, ncol=2)
@@ -723,6 +753,11 @@ Reference: 1 kHz sine wave at -20 dBFS
         ax.set_xlim(0, self.duration)
         ax.set_ylim(max(-70, min(self.results['lufs']['noise_floor_lufs'] - 5,
                                  self.results['lufs']['integrated'] - 20)), 0)
+
+        # Format x-axis with time format
+        from matplotlib.ticker import FuncFormatter
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+        ax.tick_params(axis='x', labelsize=6)
     
     def plot_lufs_distribution(self, ax):
         """Plot LUFS distribution with optimization"""
@@ -822,13 +857,18 @@ True Peak Linear:        {self.results['lufs']['true_peak']:.4f}
                           shading='auto', cmap='viridis', rasterized=True)
 
         ax.set_ylabel('Frequency (Hz)', fontsize=9)
-        ax.set_xlabel('Time (s)', fontsize=9)
+        ax.set_xlabel('Time', fontsize=9)
         ax.set_title('Spectrogram', fontsize=10, fontweight='bold')
         ax.set_ylim(0, min(10000, self.sr/2))
 
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label('Power (dB)', fontsize=8)
         cbar.ax.tick_params(labelsize=8)
+
+        # Format x-axis with time format
+        from matplotlib.ticker import FuncFormatter
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+        ax.tick_params(axis='x', labelsize=6)
     
     def plot_spectral_statistics(self, ax):
         """Plot spectral statistics"""
@@ -880,13 +920,18 @@ Crest Factor:           {self.results['snr']['crest_factor']:.2f} dB
             ax.axhspan(0.30, 0.45, alpha=0.1, color='red')
             ax.axhspan(0.0, 0.30, alpha=0.1, color='darkred')
 
-            ax.set_xlabel('Time (s)', fontsize=9)
+            ax.set_xlabel('Time', fontsize=9)
             ax.set_ylabel('STI', fontsize=9)
             ax.set_title('Speech Transmission Index Over Time', fontsize=10, fontweight='bold')
             ax.legend(loc='best', fontsize=8)
             ax.grid(True, alpha=0.3, linestyle='--')
             ax.set_xlim(0, self.duration)
             ax.set_ylim(0, 1)
+
+            # Format x-axis with time format
+            from matplotlib.ticker import FuncFormatter
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, p: self.format_time(x)))
+            ax.tick_params(axis='x', labelsize=6)
     
     def plot_sti_bands(self, ax):
         """Plot STI per frequency band"""
