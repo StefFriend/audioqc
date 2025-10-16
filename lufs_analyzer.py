@@ -163,9 +163,43 @@ class LUFSAnalyzer:
         else:
             lra = 0.0
         
-        # True peak
-        oversampled = scipy.signal.resample(self.audio, len(self.audio) * 4)
-        true_peak = np.max(np.abs(oversampled))
+        # True peak: compute using small-window oversampling to avoid large allocations
+        # Strategy: find candidate peaks, oversample small neighborhoods (e.g., 2048 samples) at 4x
+        # This captures inter-sample peaks with minimal memory usage.
+        up_factor = 4
+        window = 2048  # samples around each candidate
+        half_w = window // 2
+
+        x = self.audio
+        if x.size == 0:
+            true_peak = 0.0
+        else:
+            # Candidate indices: top-N sample magnitudes
+            N_candidates = int(max(8, min(64, x.size // max(1, (self.sr // 2)))))
+            # Ensure at least some candidates
+            N_candidates = max(8, N_candidates)
+
+            # Use argpartition to get top candidates efficiently
+            idx = np.argpartition(np.abs(x), -N_candidates)[-N_candidates:]
+            idx.sort()
+
+            tp = 0.0
+            for i0 in idx:
+                start = max(0, i0 - half_w)
+                end = min(x.size, i0 + half_w)
+                seg = x[start:end]
+                if seg.size < 4:
+                    tp = max(tp, float(np.max(np.abs(seg))))
+                    continue
+                # Oversample small segment by 4x using FFT-based resample
+                try:
+                    y = scipy.signal.resample(seg, seg.size * up_factor)
+                    tp = max(tp, float(np.max(np.abs(y))))
+                except Exception:
+                    # Fallback: use original segment peak
+                    tp = max(tp, float(np.max(np.abs(seg))))
+            true_peak = tp
+
         true_peak_db = 20 * np.log10(true_peak + eps)
         
         return {

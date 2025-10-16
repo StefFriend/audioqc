@@ -10,6 +10,7 @@ import os
 import sys
 import argparse
 import glob
+import gc
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -196,6 +197,51 @@ class AudioAnalyzer:
         print(f"  ✓ Analysis complete")
         return self.results
 
+    def cleanup(self):
+        """Explicitly free memory resources"""
+        # Clear large data arrays
+        if hasattr(self, 'audio'):
+            del self.audio
+
+        # Clear analyzer objects and their internal data
+        if hasattr(self, 'snr_analyzer') and self.snr_analyzer:
+            if hasattr(self.snr_analyzer, 'audio'):
+                del self.snr_analyzer.audio
+            del self.snr_analyzer
+
+        if hasattr(self, 'lufs_analyzer') and self.lufs_analyzer:
+            if hasattr(self.lufs_analyzer, 'audio'):
+                del self.lufs_analyzer.audio
+            del self.lufs_analyzer
+
+        if hasattr(self, 'sti_analyzer') and self.sti_analyzer:
+            if hasattr(self.sti_analyzer, 'audio'):
+                del self.sti_analyzer.audio
+            del self.sti_analyzer
+
+        if hasattr(self, 'spectral_analyzer') and self.spectral_analyzer:
+            if hasattr(self.spectral_analyzer, 'audio'):
+                del self.spectral_analyzer.audio
+            del self.spectral_analyzer
+
+        if hasattr(self, 'report_generator') and self.report_generator:
+            # Clear report generator's data references
+            if hasattr(self.report_generator, 'audio'):
+                del self.report_generator.audio
+            if hasattr(self.report_generator, 'results'):
+                del self.report_generator.results
+            del self.report_generator
+
+        # Deep clear results dictionary (contains large numpy arrays)
+        if hasattr(self, 'results') and self.results:
+            # Recursively clear nested data structures
+            for key in list(self.results.keys()):
+                if isinstance(self.results[key], dict):
+                    self.results[key].clear()
+                del self.results[key]
+            self.results.clear()
+            del self.results
+
 
 
 def process_input_path(input_path, output_dir, dpi=100):
@@ -246,13 +292,30 @@ def process_input_path(input_path, output_dir, dpi=100):
                 analyzer.dpi = dpi
                 
                 file_results = analyzer.save_report(output_path)
+
+                # Store only essential info, NOT the full results with numpy arrays
                 results[file_path] = {
                     'output_path': output_path,
-                    'results': file_results
+                    'status': 'completed'
+                    # Do NOT store file_results here - it contains large arrays
                 }
-                
+
+                # Explicit memory cleanup after each file
+                analyzer.cleanup()
+                del analyzer
+                del file_results  # Delete the results dict immediately
+
+                # Aggressive garbage collection
+                plt.close('all')  # Close any remaining matplotlib figures
+                gc.collect()
+                gc.collect()  # Call twice for cyclic references
+                gc.collect()
+
             except Exception as e:
                 print(f"✗ Error processing {filename}: {e}")
+                # Cleanup even on error
+                gc.collect()
+                plt.close('all')
     
     else:
         print(f"\n✗ Input path does not exist: {input_path}")

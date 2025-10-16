@@ -18,6 +18,7 @@ class SpectralAnalyzer:
         """Analyze frequency content and band-specific SNR"""
         nperseg = min(self.frame_length, 2048)
         
+        # Compute spectrogram locally for band analysis only
         f, t, Sxx = scipy.signal.spectrogram(
             self.audio, self.sr,
             nperseg=nperseg,
@@ -63,11 +64,9 @@ class SpectralAnalyzer:
                 'high': high
             })
         
+        # Return only compact summary; avoid carrying large Sxx in results
         return {
-            'bands': band_analysis,
-            'f': f,
-            't': t,
-            'Sxx': Sxx
+            'bands': band_analysis
         }
     
     def calculate_statistics(self, crest_factor_db):

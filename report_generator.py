@@ -826,17 +826,29 @@ True Peak Linear:        {self.results['lufs']['true_peak']:.4f}
                transform=ax.transAxes, va='center')
     
     def plot_spectrogram(self, ax):
-        """Plot spectrogram with optimization"""
-        f = self.results['spectral']['f']
-        t = self.results['spectral']['t']
-        Sxx = self.results['spectral']['Sxx']
+        """Plot spectrogram with on-the-fly computation and downsampling"""
+        import scipy.signal
+        # Compute a reasonably sized spectrogram directly from audio
+        nperseg = min(2048, max(256, int(self.sr * 0.046)))  # ~46ms window, cap to 2048
+        noverlap = nperseg // 2
+        f, t, Sxx = scipy.signal.spectrogram(
+            self.audio, self.sr,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            window='hann',
+            scaling='spectrum'
+        )
 
-        max_freq_idx = np.where(f <= min(10000, self.sr/2))[0][-1]
+        max_freq = min(10000, self.sr / 2)
+        max_freq_idx = np.where(f <= max_freq)[0]
+        if len(max_freq_idx) == 0:
+            return  # nothing to plot for very low sample rates
+        max_freq_idx = max_freq_idx[-1]
 
         # Downsample time axis to max 400 points
         max_time_points = 400
         if Sxx.shape[1] > max_time_points:
-            step = Sxx.shape[1] // max_time_points
+            step = max(1, Sxx.shape[1] // max_time_points)
             Sxx_display = Sxx[:max_freq_idx, ::step]
             t_display = t[::step]
         else:
@@ -846,7 +858,7 @@ True Peak Linear:        {self.results['lufs']['true_peak']:.4f}
         # Downsample frequency axis to max 300 bins
         max_freq_bins = 300
         if Sxx_display.shape[0] > max_freq_bins:
-            freq_step = Sxx_display.shape[0] // max_freq_bins
+            freq_step = max(1, Sxx_display.shape[0] // max_freq_bins)
             Sxx_display = Sxx_display[::freq_step, :]
             f_display = f[:max_freq_idx][::freq_step]
         else:
